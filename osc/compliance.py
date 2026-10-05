@@ -75,9 +75,13 @@ def deterministic_checks(c: dict, repo: dict, path: Path) -> list[dict]:
             d = json.loads(out)
             assignees = [a["login"] for a in d.get("assignees", [])]
             labels = [l["name"] for l in d.get("labels", [])]
-            recent = [cm for cm in d.get("comments", []) if cm.get("author", {}).get("login") != me and re.search(r"\b(i('| a)m|i will|i'll|working on|assign(ed)? to me|take this|taking this)\b", cm.get("body", ""), re.I)]
-            add(f"issue #{n} still open and unclaimed", d.get("state") == "OPEN" and not assignees and not recent,
-                f"state={d.get('state')} assignees={assignees} labels={labels} claim-comments={len(recent)}",
+            # same detector the build step uses; the old "I'm / I'll" regex read "I'm seeing this too" as a claim (10-05)
+            from .prefilter import issue_claims
+            claim = issue_claims(c["repo"], int(n)).get("reason", "")
+            if me and (f" {me}:" in claim or f"by {me}" in claim or f"assigned to {me}" == claim):
+                claim = ""
+            add(f"issue #{n} still open and unclaimed", d.get("state") == "OPEN" and not claim,
+                f"state={d.get('state')} assignees={assignees} labels={labels} claim={claim or 'none'}",
                 "if someone else claimed it, coordinate on the issue before opening the PR")
         except Exception as e:
             add(f"issue #{n} readable", None, str(e)[:100])
@@ -162,8 +166,19 @@ def deterministic_checks(c: dict, repo: dict, path: Path) -> list[dict]:
                     r = subprocess.run([*black_cmd, "--check", *py], cwd=str(path), capture_output=True, text=True, timeout=600)
                     results.append((f"black --check ({'pinned ' + m.group(1) if m else 'osc black'})", r.returncode == 0, (r.stdout + r.stderr)[-200:]))
                 else:
-                    r = subprocess.run([str(our_ruff), "format", "--check", *py], cwd=str(path), capture_output=True, text=True, timeout=300)
-                    results.append(("ruff format (osc ruff, repo config)", r.returncode == 0, (r.stdout + r.stderr)[-200:]))
+                    pyproj = (path / "pyproject.toml").read_text(errors="ignore") if (path / "pyproject.toml").exists() else ""
+                    ci = " ".join(f.read_text(errors="ignore") for f in list((path / ".github" / "workflows").glob("*.y*ml"))[:40]) if (path / ".github" / "workflows").is_dir() else ""
+                    mk = (path / "Makefile").read_text(errors="ignore") if (path / "Makefile").exists() else ""
+                    # only when the project itself formats with ruff (numpy/numba do not: their files fail `ruff format` on main)
+                    if "ruff-format" in pc or "[tool.ruff.format]" in pyproj or "ruff format" in ci or "ruff format" in mk:
+                        def _unformatted(ref):
+                            names = [f for f in py if _run(["git", "cat-file", "-e", f"{ref}:{f}"], cwd=path).returncode == 0]
+                            r3 = subprocess.run([str(our_ruff), "format", "--check", *names], cwd=str(path), capture_output=True, text=True, timeout=300) if names else None
+                            return {l.split("Would reformat: ", 1)[1].strip() for l in (r3.stdout if r3 else "").splitlines() if l.startswith("Would reformat: ")}
+                        _git(path, "checkout", "-q", c["base_sha"], check=False); base_bad = _unformatted(c["base_sha"])
+                        _git(path, "checkout", "-q", c["branch"], check=False); head_bad = _unformatted(head)
+                        worse = sorted(head_bad - base_bad)
+                        results.append(("ruff format (files our change leaves unformatted)", not worse, "would reformat: " + ", ".join(worse) if worse else "ok"))
                 # lint: only NEW findings count (pre-existing noise in large files is not ours to fix)
                 def _count(sha):
                     r2 = subprocess.run([str(our_ruff), "check", "--output-format", "concise", *[f for f in py if _run(["git", "cat-file", "-e", f"{sha}:{f}"], cwd=path).returncode == 0]],

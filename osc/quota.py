@@ -159,7 +159,8 @@ def run() -> dict:
     try:
         log.warn(STAGE, f"no PR opened yet on {day}; quota hunt (rescue money left ${_left(day):.0f})")
         from .opener import open_quota
-        att = open_quota(1)
+        from .opener import opened_on
+        att = open_quota(max(1, int(config.setting("DAILY_TARGET_PRS")) - len(opened_on(day))))
         url = next((a["url"] for a in att if a.get("opened")), None)
         url = url or salvage(day)
         url = url or hunt(day)

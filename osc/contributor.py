@@ -110,7 +110,10 @@ def run_builder(opp: dict, repo: dict, path: Path, out: Path, branch: str, feedb
          .replace("__RISK__", str(opp.get("risk"))).replace("__REVIEW_FEEDBACK__", fb)
          .replace("__CONTRIBUTING__", _contrib_text(repo)).replace("__OSC_DIR__", str(out))
          .replace("__QUALITY_RULES__", (config.PROMPTS_DIR / "code_quality_rules.md").read_text()))
-    trailer = bool(config.setting("AI_COAUTHOR_TRAILER")) and not (repo.get("raw") or {}).get("no_ai_trailer")
+    from .opener import CLA_FAMILY
+    # Google's cla/google check counts the AI co-author as an uncovered contributor and fails the PR (puppeteer #15499, #15532)
+    google = CLA_FAMILY.get(opp["repo"].split("/")[0]) == "google" or opp["repo"].split("/")[0].lower().startswith("google")
+    trailer = bool(config.setting("AI_COAUTHOR_TRAILER")) and not (repo.get("raw") or {}).get("no_ai_trailer") and not google
     p = p.replace("__TRAILER_RULE__", "Keep the default Co-authored-by trailer that your git commits add (this project discloses AI assistance)."
                   if trailer else "Do not add AI attribution lines or Co-Authored-By trailers; the human submitter owns the commit.")
     res = run_claude(
