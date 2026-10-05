@@ -103,8 +103,15 @@ function badgesHTML(d) {
   return `<div class="card today"><div class="row"><h3 class="grow" style="margin-top:0">GitHub badges · ${got} of ${d.badges.length}</h3><button class="sm" onclick="refreshBadges(this)">refresh</button></div>
     <div class="small muted">checked ${ago(d.ts)} ago for ${esc(d.login)}</div><div class="todaylist">${rows}</div></div>`;
 }
-async function loadBadges() { const el = document.getElementById('badges'); if (!el) return; try { el.innerHTML = badgesHTML(await api('/badges')); } catch (e) { el.innerHTML = `<div class="card">badges: ${esc(e.message)}</div>`; } }
-async function refreshBadges(btn) { btn.disabled = true; btn.textContent = 'checking…'; try { document.getElementById('badges').innerHTML = badgesHTML(await post('/badges/refresh')); } catch (e) { toast('badge check failed: ' + e.message); } }
+function mergedHTML(d) {
+  const m = d.merged || [];
+  const rows = m.map(r => `<div class="ti"><div class="row"><a class="grow" href="${esc(r.url)}" target="_blank"><b>${esc(r.repo)}</b>#${r.number}</a><span class="small muted">${new Date(r.merged_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span></div>
+    <div class="small">${esc(r.title)}</div><div class="small muted">${r.stars.toLocaleString()} stars · ${r.lines} lines · merged by ${esc(r.by || '?')}</div></div>`).join('');
+  return `<div class="card today"><h3 style="margin-top:0">Merged PRs · ${m.length}</h3>
+    <div class="small muted">upstream only, newest first · ${d.open_upstream ?? '?'} still open</div><div class="todaylist">${rows || '<div class="muted">none yet</div>'}</div></div>`;
+}
+async function loadBadges() { const el = document.getElementById('badges'); if (!el) return; try { const d = await api('/badges'); el.innerHTML = badgesHTML(d); const mm = document.getElementById('merged'); if (mm) mm.innerHTML = mergedHTML(d); } catch (e) { el.innerHTML = `<div class="card">badges: ${esc(e.message)}</div>`; } }
+async function refreshBadges(btn) { btn.disabled = true; btn.textContent = 'checking…'; try { const d = await post('/badges/refresh'); document.getElementById('badges').innerHTML = badgesHTML(d); const mm = document.getElementById('merged'); if (mm) mm.innerHTML = mergedHTML(d); } catch (e) { toast('badge check failed: ' + e.message); } }
 
 let todayTimer = null;
 async function refreshToday() {
@@ -120,7 +127,7 @@ async function vOverview() {
   const tiles = [['repos scanned', c.repos], ['analyzed', c.repos_analyzed], ['opportunities', c.opportunities], ['changes built', c.changes], ['ready to open', c.changes_ready], ['blocked', c.changes_blocked], ['submitted', c.changes_submitted], ['agent spend', '$' + c.cost_usd]];
   return `<h1>Overview</h1><div class="sub">Scan → build → review → opens PRs on its own (${o.settings.DAILY_MIN_PRS}–${o.settings.DAILY_TARGET_PRS} a day). Last repo-discovery scan: ${o.last_scan ? `${fmtT(o.last_scan.ts)} (${o.last_scan.n} repos)` : 'never'}</div>
   <div id="today"><div class="card muted">loading today…</div></div>
-  <div id="badges" style="margin-top:12px"><div class="card muted">loading badges…</div></div>
+  <div class="grid-today" style="margin-top:12px;grid-template-columns:1fr 1fr"><div id="badges"><div class="card muted">loading badges…</div></div><div id="merged"><div class="card muted">loading merged PRs…</div></div></div>
   <div class="tiles">${tiles.map(([l, n]) => `<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')}</div>
   <div class="grid3"><div>
     <div class="card"><h3>Pipeline actions</h3><div class="row">

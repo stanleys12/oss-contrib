@@ -68,6 +68,21 @@ def _pair(me: str) -> int:
     return n
 
 
+MERGED_Q = """query($q: String!) { search(query: $q, type: ISSUE, first: 100) { issueCount nodes { ... on PullRequest {
+  url number title mergedAt additions deletions repository { nameWithOwner stargazerCount } mergedBy { login } } } } }"""
+
+
+def merged(me: str) -> list[dict]:
+    """Our merged PRs in other people's repos, newest first."""
+    rc, out = _gh("api", "graphql", "-f", f"query={MERGED_Q}", "-f", f"q=author:{me} is:pr is:merged -user:{me} sort:updated-desc")
+    if rc != 0:
+        return []
+    rows = [{"repo": n["repository"]["nameWithOwner"], "stars": n["repository"]["stargazerCount"], "number": n["number"], "title": n["title"],
+             "url": n["url"], "merged_at": n["mergedAt"], "by": (n.get("mergedBy") or {}).get("login"), "lines": n["additions"] + n["deletions"]}
+            for n in json.loads(out)["data"]["search"]["nodes"] if n]
+    return sorted(rows, key=lambda r: r["merged_at"], reverse=True)
+
+
 def _earned(me: str) -> set[str]:
     try:
         req = urllib.request.Request(f"https://github.com/{me}?tab=achievements", headers={"User-Agent": "Mozilla/5.0"})
@@ -111,7 +126,7 @@ def compute() -> dict:
     }
     for b in out:
         b["note"] = notes.get(b["name"], "")
-    return {"ts": time.time(), "login": me, "badges": out}
+    return {"ts": time.time(), "login": me, "badges": out, "merged": merged(me), "open_upstream": open_prs}
 
 
 def get(refresh: bool = False) -> dict:
