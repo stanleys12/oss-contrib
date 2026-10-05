@@ -1,0 +1,13 @@
+.venv/
+data/
+workspace/
+logs/
+__pycache__/
+*.pyc
+.env
+.tools
+.cache/
+*.log
+.DS_Store
+*.bak
+scripts/*.local.*

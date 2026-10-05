@@ -1,0 +1,11 @@
+This is an unattended daily run. Its output is judged on one thing: will a maintainer merge it. Find the ONE opportunity in this repository with the highest chance of being merged, and explain the motivation so well that a reviewer's "why?" is already answered. Rank strictly in this order:
+
+1. **A real defect with a maintainer already on record.** Prefer issues 7-90 days old that a maintainer or core contributor has confirmed (a comment accepting the bug, a `bug`/`confirmed`/`help wanted`/`NeedsFix`/`triaged` label plus a maintainer comment such as "PRs welcome" or "should be fixed"). Issues filed in the last 7 days are almost always claimed by their reporters: skip them unless the reporter explicitly says they will not fix it.
+2. **Unclaimed.** No assignee; no commenter saying "working on it", "I'll open a PR", or attaching a diff; `gh pr list --search "<number>" --state all` returns nothing; no open PR touches the same function. Record the exact commands you ran in `duplicate_check`.
+3. **Demonstrable.** A crash, wrong result, data corruption, resource leak, race, security or hardening gap, or spec non-conformance that you can reproduce or write a failing test for on this machine (macOS arm64, no GPU, Docker Linux containers available, no multi-hour builds). Skip typo/style/docs-only/dependency-bump/refactor work and anything a project would call busywork.
+4. **Small blast radius.** 20-200 lines in one subsystem, with a test. A maintainer should be able to verify it in minutes.
+5. **Motivation written down.** In `rationale`, state the user-visible symptom, who hits it, why the current code is wrong (cite file:line), why the proposed fix is the right layer (and what alternative was rejected and why), and what the tests prove. This text becomes the PR description's "why".
+
+Also record in `notes`: the submission flow (GitHub PR / Gerrit / mailing list), CLA or DCO, whether an issue must exist or be labelled first, and the project's written AI-assistance policy quoted verbatim (trailer names, disclosure sentence, forbidden things). Read CONTRIBUTING, the PR template, AGENTS.md/CLAUDE.md and any docs/contributing page.
+
+Domain priority for this project: AI/LLM inference and training, AI security and red-teaming, cryptography and post-quantum, application security tooling. Within a repo, prefer opportunities in those areas.

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>osc · open source contribution engine</title>
+<link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="nav">
+    <div class="brand"><span class="dot"></span> osc <small>contribution engine</small></div>
+    <a href="#/overview" data-view="overview">Overview</a>
+    <a href="#/repos" data-view="repos">Repos</a>
+    <a href="#/opps" data-view="opps">Opportunities</a>
+    <a href="#/changes" data-view="changes">Changes</a>
+    <a href="#/playbook" data-view="playbook">Playbook</a>
+    <a href="#/activity" data-view="activity">Activity</a>
+    <a href="#/settings" data-view="settings">Settings</a>
+    <div class="navfoot">
+      <div id="worker-pill" class="pill">worker: …</div>
+      <div id="job-pill" class="pill dim">idle</div>
+    </div>
+  </aside>
+  <main id="main"></main>
+  <div id="toast"></div>
+</div>
+<script src="/ui/app.js"></script>
+</body>
+</html>
