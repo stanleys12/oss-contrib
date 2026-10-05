@@ -84,6 +84,9 @@ DEFAULTS = {
     "DISCUSS_AUTO_POST": True,    # user 10-04: "whatever you think is best" -> on, checker-gated, max DISCUSS_PER_RUN a day
     "DISCUSS_DISCLOSURE": "(I looked this up in the code with help from an AI assistant; the links are to the lines I checked.)",
     "DISCUSS_MODEL": "sonnet",
+    # ---- maintenance of the owner's own public repos (user requirement 2026-10-04) ----
+    "MAINTAIN_MODEL": "opus",
+    "MAINTAIN_BUDGET_USD": 5.0,
     "DISCUSS_BUDGET_USD": 2.5,
     "DISCUSS_DAILY_USD": 10.0,
     "DISCUSS_PER_RUN": 2,         # answers per run; quality over volume
