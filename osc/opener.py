@@ -358,7 +358,8 @@ def blocker(c: dict, open_repos: set[str] | None = None) -> str:
 
 def opened_on(day: str) -> list[str]:
     """PR urls we opened on `day` (YYYY-MM-DD, local), automatically or by hand. GitHub is the source of truth."""
-    rc, out = _gh("api", "-X", "GET", "search/issues", "-f", f"q=author:@me is:pr created:{day}", "-q", ".items[].html_url")
+    # -user:@me leaves out PRs in our own repos (daily-lab etc.); only upstream contributions count
+    rc, out = _gh("api", "-X", "GET", "search/issues", "-f", f"q=author:@me is:pr created:{day} -user:@me", "-q", ".items[].html_url")
     if rc == 0:
         return [u for u in out.split() if u.startswith("https://")]
     return [r["pr_url"] for r in db.rows("SELECT pr_url FROM changes WHERE status_note LIKE ?", (f"%PR opened automatically {day}%",))]

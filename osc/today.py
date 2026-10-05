@@ -105,7 +105,8 @@ def poll() -> None:
     UPDATES_F.write_text(json.dumps(feed, indent=1))
     day = time.strftime("%Y-%m-%d")
     with _lock:
-        _state["opened_today"] = [n["url"] for n in nodes if time.strftime("%Y-%m-%d", time.localtime(epoch(n["createdAt"]))) == day]
+        _state["opened_today"] = [n["url"] for n in nodes if time.strftime("%Y-%m-%d", time.localtime(epoch(n["createdAt"]))) == day
+                                  and not n["repository"]["nameWithOwner"].startswith(me + "/")]
         _state["open_prs"] = sum(1 for n in nodes if n["state"] == "OPEN")
         _state["polled_at"] = time.time()
         _state["error"] = ""
