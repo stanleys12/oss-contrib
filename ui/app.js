@@ -59,11 +59,13 @@ const hm = ts => new Date(ts * 1000).toLocaleTimeString([], { hour: 'numeric', m
 const inMin = ts => { const m = Math.round((ts - Date.now() / 1000) / 60); return m <= 0 ? 'now' : m < 60 ? `in ${m}m` : `in ${Math.floor(m / 60)}h ${m % 60}m`; };
 function todayHTML(t) {
   const p = t.plan, d = t.done, r = p.running;
-  const prog = Math.min(1, p.opened / Math.max(1, p.target)), bud = Math.min(1, p.budget_spent / Math.max(1, p.budget_cap));
+  const cap = p.max || p.target, prog = Math.min(1, p.opened / Math.max(1, cap)), minAt = Math.min(1, p.target / Math.max(1, cap)), bud = Math.min(1, p.budget_spent / Math.max(1, p.budget_cap));
   const prLink = u => { const m = u.match(/github\.com\/(.+)\/pull\/(\d+)/); return `<a href="${esc(u)}" target="_blank">${esc(m ? m[1] + '#' + m[2] : u)}</a>`; };
   const plan = `<div class="card today"><h3>Plan for today</h3>
-    <div class="big">${p.opened} / ${p.target} <span class="muted">PRs opened</span></div><div class="bar"><b style="width:${prog * 100}%;background:var(${p.opened >= p.target ? '--ok' : '--acc'})"></b></div>
-    <div class="small" style="margin:8px 0 4px">${p.opened >= p.target ? 'Target hit. Hunting stops for today; the scheduled runs still scout.' : `Keeps hunting until ${p.target} are open, every hour around the clock.`}</div>
+    <div class="big">${p.opened} <span class="muted">PRs opened · minimum ${p.target} · up to ${cap}</span></div>
+    <div class="bar" style="position:relative"><b style="width:${prog * 100}%;background:var(${p.opened >= p.target ? '--ok' : '--acc'})"></b><i title="daily minimum" style="position:absolute;top:-3px;bottom:-3px;left:${minAt * 100}%;width:2px;background:var(--fg2)"></i></div>
+    <div class="small row" style="justify-content:space-between;margin-top:2px"><span class="muted">0</span><span class="muted" style="margin-left:${minAt * 100 - 8}%">min ${p.target}</span><span class="muted">${cap}</span></div>
+    <div class="small" style="margin:8px 0 4px">${p.opened >= cap ? `Daily cap of ${cap} reached. Nothing more opens today.` : p.opened >= p.target ? `Minimum met. Still opening ready PRs that pass every check, up to ${cap}.` : `Keeps hunting until ${p.target} are open, every hour around the clock, then keeps opening ready ones up to ${cap}.`}</div>
     <h3>Right now</h3>${r.active ? `<div>${badge('running')} <b>${esc(r.kind)}</b> ${r.repo ? `on <b>${esc(r.repo)}</b>` : ''} <span class="muted">since ${hm(r.since)}</span></div><div class="small mono" style="margin-top:4px">${esc(r.last)}</div>` : '<span class="muted">idle</span>'}
     <h3>Next up</h3>${p.next.map(n => `<div class="small">${hm(n.at)} <span class="muted">(${inMin(n.at)})</span> · ${esc(n.what)}</div>`).join('')}
     ${p.scan_due ? `<div class="small">${new Date(p.scan_due * 1000).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })} · GitHub-wide repo discovery scan</div>` : ''}

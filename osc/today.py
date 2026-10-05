@@ -192,7 +192,7 @@ def summary() -> dict:
     runs.sort(key=lambda r: r["at"])
     last_scan = db.kv_get("last_scan") or {}
     plan = {
-        "target": target, "opened": len(opened), "budget_spent": round(spent, 2), "budget_cap": cap,
+        "target": target, "max": int(config.setting("DAILY_TARGET_PRS")), "opened": len(opened), "budget_spent": round(spent, 2), "budget_cap": cap,
         "next": runs[:3], "running": _running(),
         "scan_due": (last_scan.get("ts", 0) + float(config.setting("DAILY_RESCAN_DAYS")) * 86400) if last_scan else None,
         "free_gb": round(os.statvfs(PROJECT).f_bavail * os.statvfs(PROJECT).f_frsize / 1e9, 1),
