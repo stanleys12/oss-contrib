@@ -54,8 +54,8 @@ DEFAULTS = {
     "DAILY_BUDGET_USD": 100.0,     # hard stop for agent spend per day (both runs combined)
     # ---- auto-open (user requirement 2026-09-29: at least one PR a day, strong repos only) ----
     "DAILY_BACKLOG_MAX_AGE_DAYS": 21,  # unbuilt opportunities from earlier scouts stay eligible this long
-    "DAILY_MIN_PRS": 1,           # quota: the run keeps building until this many PRs are open today (or budget/limits hit)
-    "DAILY_TARGET_PRS": 3,        # stop building once this many are open today
+    "DAILY_MIN_PRS": 3,           # user 10-05: the quota keeper hunts (spends rescue money) until this many PRs are open today
+    "DAILY_TARGET_PRS": 10,       # user 10-05: hard cap; never open more than this many PRs in one day
     "DAILY_RESCUE_USD": 200.0,     # extra spend per day for the hourly quota keeper while under DAILY_TARGET_PRS
     "DAILY_RESCUE_ROUNDS": 4,     # extra scout+build rounds per run when the quota is unmet
     "DAILY_RESCUE_BUILDS": 3,     # builds per rescue round

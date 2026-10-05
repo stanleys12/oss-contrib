@@ -179,7 +179,7 @@ def summary() -> dict:
         st = {}
     spent = float(st.get("ledger", {}).get(day, 0))
     cap = float(config.setting("DAILY_BUDGET_USD")) + float(config.setting("DAILY_RESCUE_USD"))
-    target = int(config.setting("DAILY_TARGET_PRS"))
+    target = int(config.setting("DAILY_MIN_PRS"))      # the bar the quota hunt works toward; DAILY_TARGET_PRS is the cap
     with _lock:
         opened = list(_state["opened_today"])
         polled, err, open_prs = _state["polled_at"], _state["error"], _state["open_prs"]

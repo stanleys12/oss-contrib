@@ -369,6 +369,8 @@ def open_quota(want: int, only: list[str] | None = None) -> list[dict]:
     tried = []
     opened = 0
     open_repos = _open_repos()
+    cap = int(config.setting("DAILY_TARGET_PRS")) - len(opened_on(time.strftime("%Y-%m-%d")))
+    want = min(want, max(0, cap))     # hard daily cap, whoever calls this
     for cid in (only if only is not None else backlog()):
         if opened >= want:
             break

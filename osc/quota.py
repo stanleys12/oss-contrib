@@ -47,10 +47,10 @@ def _left(day: str) -> float:
 
 
 def _met(day: str) -> list[str]:
-    """Non-empty once today's target (DAILY_TARGET_PRS, user 10-03: as many as possible) is open."""
+    """Non-empty once today's minimum (DAILY_MIN_PRS, user 10-05: 3) is open; hunting stops there."""
     from .opener import opened_on
     got = opened_on(day)
-    return got if len(got) >= int(config.setting("DAILY_TARGET_PRS")) else []
+    return got if len(got) >= int(config.setting("DAILY_MIN_PRS")) else []
 
 
 def salvage(day: str, limit: int = 3) -> str | None:
@@ -137,6 +137,16 @@ def run() -> dict:
         return {"skipped": "AUTO_OPEN off"}
     got = _met(day)
     if got:
+        # minimum met: no more paid hunting, but ready changes still open (free) up to the daily cap
+        from .opener import open_quota, opened_on
+        left = int(config.setting("DAILY_TARGET_PRS")) - len(opened_on(day))
+        if left > 0 and not LOCK.exists():
+            LOCK.write_text(str(os.getpid()))
+            try:
+                extra = [a["url"] for a in open_quota(left) if a.get("opened")]
+            finally:
+                LOCK.unlink(missing_ok=True)
+            return {"met": got, "opened_from_backlog": extra}
         return {"met": got}
     if time.localtime().tm_hour >= LAST_HOUR:
         return {"skipped": "too late today"}

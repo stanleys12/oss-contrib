@@ -99,7 +99,7 @@ async function vOverview() {
   const o = overview || await api('/overview'); const c = o.counts;
   setTimeout(() => { refreshToday(); if (!todayTimer) todayTimer = setInterval(refreshToday, 30000); }, 0);
   const tiles = [['repos scanned', c.repos], ['analyzed', c.repos_analyzed], ['opportunities', c.opportunities], ['changes built', c.changes], ['ready to open', c.changes_ready], ['blocked', c.changes_blocked], ['submitted', c.changes_submitted], ['agent spend', '$' + c.cost_usd]];
-  return `<h1>Overview</h1><div class="sub">Scan → build → review → opens PRs on its own (target ${o.settings.DAILY_TARGET_PRS}/day). Last repo-discovery scan: ${o.last_scan ? `${fmtT(o.last_scan.ts)} (${o.last_scan.n} repos)` : 'never'}</div>
+  return `<h1>Overview</h1><div class="sub">Scan → build → review → opens PRs on its own (${o.settings.DAILY_MIN_PRS}–${o.settings.DAILY_TARGET_PRS} a day). Last repo-discovery scan: ${o.last_scan ? `${fmtT(o.last_scan.ts)} (${o.last_scan.n} repos)` : 'never'}</div>
   <div id="today"><div class="card muted">loading today…</div></div>
   <div class="tiles">${tiles.map(([l, n]) => `<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')}</div>
   <div class="grid3"><div>
