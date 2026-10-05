@@ -315,12 +315,15 @@ def try_open(cid: str, allow_fix: bool = True) -> dict:
 
 def backlog() -> list[str]:
     """Prepared/ready changes, best first, that are not blocked by the cheap checks."""
-    rows = db.rows("SELECT c.id, c.repo, c.review_score, c.compliance FROM changes c WHERE c.status IN ('prepared','ready') ORDER BY c.review_score DESC")
+    rows = db.rows("SELECT c.id, c.repo, c.review_score, c.compliance, r.median_merge_days, r.ext_merge_ratio FROM changes c "
+                   "LEFT JOIN repos r ON r.full_name=c.repo WHERE c.status IN ('prepared','ready') ORDER BY c.review_score DESC")
     out = []
     for r in rows:
         comp = json.loads(r["compliance"]) if r["compliance"] else {}
         ml = float((comp.get("agent") or {}).get("merge_likelihood") or 0)
-        out.append(((r["review_score"] or 0) * max(ml, 1), r["id"]))
+        # merged PRs are what count (Pull Shark tiers): prefer repos that merge outside PRs often and fast
+        speed = 1.0 / (1.0 + float(r["median_merge_days"] or 7) / 7)
+        out.append(((r["review_score"] or 0) * max(ml, 1) * (0.5 + float(r["ext_merge_ratio"] or 0.3)) * (0.5 + speed), r["id"]))
     return [cid for _, cid in sorted(out, reverse=True)]
 
 

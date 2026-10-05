@@ -78,6 +78,18 @@ def today():
     return summary()
 
 
+@app.get("/api/badges")
+def badges_get():
+    from .badges import get
+    return get()
+
+
+@app.post("/api/badges/refresh")
+def badges_refresh():
+    from .badges import get
+    return get(refresh=True)
+
+
 @app.post("/api/today/poll")
 def today_poll():
     from .today import poll, summary

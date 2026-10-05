@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -94,11 +95,39 @@ def our_repos() -> list[str]:
     return [r["repo"] for r in db.rows("SELECT DISTINCT repo FROM changes WHERE status IN ('submitted','merged')")]
 
 
+def pool() -> list[str]:
+    """Repos whose Q&A we answer in: ones we contribute to, plus the best-ranked repos in our domains."""
+    from .daily import DENY
+    mine = our_repos()
+    extra = [r["full_name"] for r in db.rows("SELECT full_name, raw FROM repos WHERE archived IS NOT 1 AND stars >= 1500 ORDER BY score DESC LIMIT ?",
+                                             (int(config.setting("DISCUSS_EXTRA_REPOS")) * 2,))
+             if r["full_name"] not in DENY and '"ai_prohibited": true' not in (r["raw"] or "")]
+    return list(dict.fromkeys(mine + extra[:int(config.setting("DISCUSS_EXTRA_REPOS"))]))
+
+
+def accept_rate(repo: str, st: dict) -> float:
+    """Share of answerable discussions that end with an accepted answer (cached a week). Askers in repos with
+    a habit of marking answers are the ones who will mark ours."""
+    c = st.setdefault("accept_rate", {}).get(repo)
+    if c and time.time() - c["ts"] < 7 * 86400:
+        return c["rate"]
+    n = {}
+    for k in ("answered", "unanswered"):
+        rc, raw = _gh("api", "graphql", "-f", "query=query($q: String!) { search(query: $q, type: DISCUSSION, first: 1) { discussionCount } }",
+                      "-f", f"q=repo:{repo} is:{k}")
+        n[k] = json.loads(raw)["data"]["search"]["discussionCount"] if rc == 0 else 0
+    tot = n["answered"] + n["unanswered"]
+    rate = round(n["answered"] / tot, 3) if tot >= 10 else 0.0
+    st["accept_rate"][repo] = {"ts": time.time(), "rate": rate, "n": tot}
+    return rate
+
+
 def candidates(me: str, st: dict) -> list[dict]:
     now = time.time()
     max_age = float(config.setting("DISCUSS_MAX_AGE_DAYS")) * 86400
     out = []
-    repos = our_repos()
+    repos = pool()
+    mine = set(our_repos())
     for i in range(0, len(repos), 6):          # the search query has a length limit
         q = " ".join(f"repo:{r}" for r in repos[i:i + 6]) + " is:unanswered is:open"
         rc, raw = _gh("api", "graphql", "-f", f"query={SEARCH}", "-f", f"q={q}")
@@ -120,8 +149,13 @@ def candidates(me: str, st: dict) -> list[dict]:
                 continue                        # a maintainer is already on it
             if d["comments"]["totalCount"] > 4:
                 continue
-            asker_active = now - _epoch(d["updatedAt"]) < 7 * 86400
-            d["_score"] = (2 if asker_active else 0) + (1 if d["comments"]["totalCount"] == 0 else 0) - age / max_age
+            repo = d["repository"]["nameWithOwner"]
+            rate = accept_rate(repo, st)
+            if rate < float(config.setting("DISCUSS_MIN_ACCEPT_RATE")) and repo not in mine:
+                continue                        # askers there rarely mark answers
+            asker_active = now - _epoch(d["updatedAt"]) < 3 * 86400
+            d["_score"] = (4 * rate + (2 if asker_active else 0) + (1.5 if age < 4 * 86400 else 0)
+                           + (1 if d["comments"]["totalCount"] == 0 else 0) + (0.5 if repo in mine else 0) - age / max_age)
             out.append(d)
     return sorted(out, key=lambda d: -d["_score"])
 
@@ -169,10 +203,16 @@ def draft(d: dict) -> tuple[dict, float]:
     return a, cost
 
 
-def post(d: dict, body: str) -> str:
+def post(d: dict, body: str, reply_to: str | None = None, disclose: bool = True) -> str:
     note = config.setting("DISCUSS_DISCLOSURE")
-    if note and note not in body:
+    if disclose and note and note not in body:
         body = body.rstrip() + "\n\n" + note
+    if reply_to:
+        q = 'mutation($id: ID!, $body: String!, $r: ID!) { addDiscussionComment(input: {discussionId: $id, body: $body, replyToId: $r}) { comment { url } } }'
+        rc, out = _gh("api", "graphql", "-f", f"query={q}", "-f", f"id={d['id']}", "-f", f"body={body}", "-f", f"r={reply_to}")
+        if rc != 0:
+            raise RuntimeError(f"reply failed: {out[:200]}")
+        return json.loads(out)["data"]["addDiscussionComment"]["comment"]["url"]
     q = 'mutation($id: ID!, $body: String!) { addDiscussionComment(input: {discussionId: $id, body: $body}) { comment { url } } }'
     rc, out = _gh("api", "graphql", "-f", f"query={q}", "-f", f"id={d['id']}", "-f", f"body={body}")
     if rc != 0:
@@ -187,6 +227,69 @@ def accepted(me: str) -> list[str]:
     if rc != 0:
         return []
     return [n["url"] for n in json.loads(raw)["data"]["search"]["nodes"] if n and ((n.get("answer") or {}).get("author") or {}).get("login") == me]
+
+
+THREAD = """query($o: String!, $n: String!, $k: Int!) { repository(owner: $o, name: $n) { defaultBranchRef { target { oid } } discussion(number: $k) {
+  id number title url body createdAt updatedAt isAnswered locked author { login } answer { author { login } }
+  repository { nameWithOwner defaultBranchRef { target { oid } } } category { name isAnswerable }
+  comments(first: 40) { totalCount nodes { id url author { login } authorAssociation createdAt body isAnswer
+    replies(first: 30) { nodes { id author { login } createdAt body } } } }
+} } }"""
+
+THANKS = re.compile(r"\b(thanks?|thank you|thx|works?( now)?|worked|that did it|solved|fixed it|perfect|got it working|that helped)\b", re.I)
+
+
+def followups(me: str, st: dict) -> list[dict]:
+    """Our posted answers in the last 21 days: answer the asker's follow-up, or, when they said it worked but did
+    not mark it, add one short note (once per discussion)."""
+    done = []
+    for rec in st["drafts"]:
+        url = rec.get("posted") or ""
+        if not url.startswith("https://") or time.time() - rec["ts"] > 21 * 86400 or rec.get("accepted"):
+            continue
+        owner, name, _, num = url.split("github.com/")[1].split("#")[0].split("/")[:4]
+        rc, raw = _gh("api", "graphql", "-f", f"query={THREAD}", "-f", f"o={owner}", "-f", f"n={name}", "-F", f"k={int(num)}")
+        d = ((json.loads(raw).get("data") or {}).get("repository") or {}).get("discussion") if rc == 0 else None
+        if not d:
+            continue
+        if ((d.get("answer") or {}).get("author") or {}).get("login") == me:
+            rec["accepted"] = time.time()
+            log.ok(STAGE, f"answer accepted: {url}", repo=rec["repo"])
+            continue
+        if d["isAnswered"] or d["locked"]:
+            continue
+        ours = next((c for c in d["comments"]["nodes"] if c["url"] == url.split("?")[0] or (c.get("author") or {}).get("login") == me), None)
+        if not ours:
+            continue
+        asker = (d.get("author") or {}).get("login")
+        msgs = [(c["createdAt"], (c.get("author") or {}).get("login"), c["body"]) for c in d["comments"]["nodes"]]
+        msgs += [(r["createdAt"], (r.get("author") or {}).get("login"), r["body"]) for r in (ours.get("replies") or {}).get("nodes") or []]
+        last_ours = max(t for t, who, _ in msgs if who == me)
+        new = [(t, who, b) for t, who, b in msgs if t > last_ours and who == asker]
+        if not new:
+            continue
+        text = "\n\n".join(b for _, _, b in new)
+        if THANKS.search(text) and len(text) < 400 and not re.search(r"\?|but |however|still|doesn.t|didn.t|error", text, re.I):
+            if rec.get("nudged"):
+                continue
+            body = "Glad that worked. If it answers your question, marking it as the answer helps the next person who searches for this."
+            rec["nudged"] = post(d, body, reply_to=ours["id"], disclose=False)
+            done.append({"url": rec["nudged"], "kind": "nudge"})
+            log.ok(STAGE, f"asked {asker} to mark the answer: {rec['nudged']}", repo=rec["repo"])
+            continue
+        if int(rec.get("followups") or 0) >= 3:
+            continue
+        thread = "\n\n".join(f"{who}: {_clip(b, 2500)}" for t, who, b in sorted(msgs))
+        d["body"] = (d.get("body") or "") + f"\n\n---- The conversation so far (you are {me}, your earlier answer is in it). {asker} replied to you; answer that reply. ----\n" + thread
+        d["comments"]["nodes"] = []
+        a, cost = draft(d)
+        st["ledger"][time.strftime("%Y-%m-%d")] = round(float(st["ledger"].get(time.strftime("%Y-%m-%d"), 0)) + cost, 2)
+        rec["followups"] = int(rec.get("followups") or 0) + 1
+        if a.get("answer") and a.get("body") and config.setting("DISCUSS_AUTO_POST"):
+            u = post(d, a["body"], reply_to=ours["id"], disclose=False)
+            done.append({"url": u, "kind": "follow-up"})
+            log.ok(STAGE, f"followed up {u}", repo=rec["repo"])
+    return done
 
 
 def run(dry: bool = False) -> dict:
@@ -205,6 +308,12 @@ def run(dry: bool = False) -> dict:
     day = time.strftime("%Y-%m-%d")
     done = []
     try:
+        try:
+            fu = followups(me, st)
+            _save(st)
+        except Exception as e:
+            fu = []
+            log.warn(STAGE, f"follow-ups failed: {e}")
         # drafts that passed the checker earlier and are still unanswered go first
         if config.setting("DISCUSS_AUTO_POST"):
             for rec in [r for r in st["drafts"] if r["answer"] and not r["posted"] and time.time() - r["ts"] < 3 * 86400]:
@@ -246,7 +355,7 @@ def run(dry: bool = False) -> dict:
                 done.append(rec)
         st["accepted"] = accepted(me)
         _save(st)
-        return {"answered": [{"url": r["url"], "posted": r["posted"]} for r in done], "accepted_so_far": st["accepted"]}
+        return {"answered": [{"url": r["url"], "posted": r["posted"]} for r in done], "follow_ups": fu, "accepted_so_far": st["accepted"]}
     except Exception:
         log.error(STAGE, "discuss run crashed:\n" + traceback.format_exc())
         raise

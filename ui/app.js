@@ -89,6 +89,23 @@ function todayHTML(t) {
       ${u.kind !== 'opened' && u.text && u.text !== u.kind && u.text !== 'merged' ? `<div class="small" style="color:var(--fg2)">${esc(u.text.slice(0, 220))}</div>` : ''}</div>`).join('') || '<div class="muted">no activity yet</div>'}</div>${fus}${needs}</div>`;
   return `<div class="grid-today">${plan}${done}${ups}</div>`;
 }
+/* ---------------- GitHub badges ---------------- */
+function badgesHTML(d) {
+  const fmt = n => n == null ? '' : n.toLocaleString();
+  const rows = d.badges.map(b => {
+    const tiers = b.tiers.length ? `<div class="row small" style="gap:6px;margin-top:4px">${b.tiers.map((t, i) => `<span class="${b.count >= t ? 'pct' : 'muted'}" title="${['badge', 'bronze', 'silver', 'gold'][i]}">${['●', 'x2', 'x3', 'x4'][i]} ${fmt(t)}</span>`).join('')}</div>` : '';
+    const bar = b.tiers.length ? `<div class="bar" style="margin-top:4px"><b style="width:${(b.next == null ? 1 : b.progress) * 100}%;background:var(${b.earned ? '--ok' : '--acc'})"></b></div>
+      <div class="small muted">${b.next == null ? 'top tier reached' : `${fmt(b.count)} / ${fmt(b.next)} for ${b.next_name}`}</div>` : '';
+    const state = b.earned ? badge(b.tier ? b.tier : 'earned', 'approve') : badge('not yet', 'needs_work');
+    return `<div class="ti"><div class="row"><b class="grow">${esc(b.name)}</b>${state}</div><div class="small muted">${esc(b.how)}${b.count != null ? ` · <b>${fmt(b.count)}</b>` : ''}</div>${bar}${tiers}${b.note ? `<div class="small" style="color:var(--fg2);margin-top:3px">${esc(b.note)}</div>` : ''}</div>`;
+  }).join('');
+  const got = d.badges.filter(b => b.earned).length;
+  return `<div class="card today"><div class="row"><h3 class="grow" style="margin-top:0">GitHub badges · ${got} of ${d.badges.length}</h3><button class="sm" onclick="refreshBadges(this)">refresh</button></div>
+    <div class="small muted">checked ${ago(d.ts)} ago for ${esc(d.login)}</div><div class="todaylist">${rows}</div></div>`;
+}
+async function loadBadges() { const el = document.getElementById('badges'); if (!el) return; try { el.innerHTML = badgesHTML(await api('/badges')); } catch (e) { el.innerHTML = `<div class="card">badges: ${esc(e.message)}</div>`; } }
+async function refreshBadges(btn) { btn.disabled = true; btn.textContent = 'checking…'; try { document.getElementById('badges').innerHTML = badgesHTML(await post('/badges/refresh')); } catch (e) { toast('badge check failed: ' + e.message); } }
+
 let todayTimer = null;
 async function refreshToday() {
   const el = document.getElementById('today'); if (!el) { clearInterval(todayTimer); todayTimer = null; return; }
@@ -99,10 +116,11 @@ async function pollNow(btn) { btn.disabled = true; btn.textContent = 'checking�
 /* ---------------- Overview ---------------- */
 async function vOverview() {
   const o = overview || await api('/overview'); const c = o.counts;
-  setTimeout(() => { refreshToday(); if (!todayTimer) todayTimer = setInterval(refreshToday, 30000); }, 0);
+  setTimeout(() => { refreshToday(); loadBadges(); if (!todayTimer) todayTimer = setInterval(refreshToday, 30000); }, 0);
   const tiles = [['repos scanned', c.repos], ['analyzed', c.repos_analyzed], ['opportunities', c.opportunities], ['changes built', c.changes], ['ready to open', c.changes_ready], ['blocked', c.changes_blocked], ['submitted', c.changes_submitted], ['agent spend', '$' + c.cost_usd]];
   return `<h1>Overview</h1><div class="sub">Scan → build → review → opens PRs on its own (${o.settings.DAILY_MIN_PRS}–${o.settings.DAILY_TARGET_PRS} a day). Last repo-discovery scan: ${o.last_scan ? `${fmtT(o.last_scan.ts)} (${o.last_scan.n} repos)` : 'never'}</div>
   <div id="today"><div class="card muted">loading today…</div></div>
+  <div id="badges" style="margin-top:12px"><div class="card muted">loading badges…</div></div>
   <div class="tiles">${tiles.map(([l, n]) => `<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')}</div>
   <div class="grid3"><div>
     <div class="card"><h3>Pipeline actions</h3><div class="row">

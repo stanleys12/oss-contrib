@@ -88,9 +88,11 @@ DEFAULTS = {
     "MAINTAIN_MODEL": "opus",
     "MAINTAIN_BUDGET_USD": 5.0,
     "DISCUSS_BUDGET_USD": 2.5,
-    "DISCUSS_DAILY_USD": 10.0,
-    "DISCUSS_PER_RUN": 2,         # answers per run; quality over volume
-    "DISCUSS_MAX_AGE_DAYS": 45,
+    "DISCUSS_DAILY_USD": 25.0,     # user 10-05: push for Galaxy Brain this week
+    "DISCUSS_PER_RUN": 2,         # answers per run, 3 runs a day; every answer still has to pass the checker
+    "DISCUSS_EXTRA_REPOS": 70,    # best-ranked repos in our domains, on top of the ones we contribute to
+    "DISCUSS_MIN_ACCEPT_RATE": 0.25,  # skip repos where askers rarely mark answers
+    "DISCUSS_MAX_AGE_DAYS": 21,
     "DAILY_DOMAINS": ["llm-inference", "post-training", "security", "agents-mcp", "ml-core", "crypto-pq"],
     "DAILY_MIN_PRIORITY": 0.6,    # opportunity priority floor to build
     "DAILY_MIN_ACCEPT": 0.5,      # scout's accept-likelihood floor to build
