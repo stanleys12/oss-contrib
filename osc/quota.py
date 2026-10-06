@@ -47,10 +47,11 @@ def _left(day: str) -> float:
 
 
 def _met(day: str) -> list[str]:
-    """Non-empty once today's minimum (DAILY_MIN_PRS, user 10-05: 3) is open; hunting stops there."""
+    """Non-empty once today's TARGET (DAILY_TARGET_PRS) is open. User 2026-10-06: keep hunting all day up to
+    the cap, not just to the minimum, so the system is active instead of coasting after 3."""
     from .opener import opened_on
     got = opened_on(day)
-    return got if len(got) >= int(config.setting("DAILY_MIN_PRS")) else []
+    return got if len(got) >= int(config.setting("DAILY_TARGET_PRS")) else []
 
 
 def salvage(day: str, limit: int = 3) -> str | None:
@@ -120,8 +121,11 @@ def hunt(day: str) -> str | None:
                 continue
             log.warn(STAGE, "no candidates left today")
             return None
-        tried |= {o["id"] for o in cands[:3]}
-        out = build(cands, _left(day), 3, float(config.setting("MIN_FREE_GB")), open_left=1)
+        from .opener import opened_on
+        gap = max(1, int(config.setting("DAILY_TARGET_PRS")) - len(opened_on(day)))   # how many more to reach the cap
+        n = min(len(cands), max(3, gap))
+        tried |= {o["id"] for o in cands[:n]}
+        out = build(cands, _left(day), n, float(config.setting("MIN_FREE_GB")), open_left=gap)
         _charge(day, sum(b.get("cost", 0) for b in out))
         for b in out:
             if b.get("opened"):
@@ -137,17 +141,7 @@ def run() -> dict:
         return {"skipped": "AUTO_OPEN off"}
     got = _met(day)
     if got:
-        # minimum met: no more paid hunting, but ready changes still open (free) up to the daily cap
-        from .opener import open_quota, opened_on
-        left = int(config.setting("DAILY_TARGET_PRS")) - len(opened_on(day))
-        if left > 0 and not LOCK.exists():
-            LOCK.write_text(str(os.getpid()))
-            try:
-                extra = [a["url"] for a in open_quota(left) if a.get("opened")]
-            finally:
-                LOCK.unlink(missing_ok=True)
-            return {"met": got, "opened_from_backlog": extra}
-        return {"met": got}
+        return {"met": got}        # the daily cap (DAILY_TARGET_PRS) is already open; nothing more today
     if time.localtime().tm_hour >= LAST_HOUR:
         return {"skipped": "too late today"}
     if time.localtime().tm_hour < FIRST_HOUR and "--now" not in sys.argv:
@@ -167,10 +161,10 @@ def run() -> dict:
     t0 = time.time()
     url = None
     try:
-        log.warn(STAGE, f"no PR opened yet on {day}; quota hunt (rescue money left ${_left(day):.0f})")
-        from .opener import open_quota
-        from .opener import opened_on
-        att = open_quota(max(1, int(config.setting("DAILY_TARGET_PRS")) - len(opened_on(day))))
+        from .opener import open_quota, opened_on
+        have = len(opened_on(day))
+        log.warn(STAGE, f"{have}/{config.setting('DAILY_TARGET_PRS')} PRs open on {day}; hunting for more (rescue money left ${_left(day):.0f})")
+        att = open_quota(max(1, int(config.setting("DAILY_TARGET_PRS")) - have))
         url = next((a["url"] for a in att if a.get("opened")), None)
         url = url or salvage(day)
         url = url or hunt(day)
