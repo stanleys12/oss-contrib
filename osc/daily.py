@@ -25,7 +25,8 @@ from .housekeeping import PROJECT, apply_isolation, cleanup, report as disk_repo
 STAGE = "daily"
 LOCK = PROJECT / "data" / "daily.lock"
 REPORTS = PROJECT / "data" / "reports"
-DENY = {"openai/codex", "pq-code-package/mlkem-native", "PQClean/PQClean", "huggingface/transformers",
+DENY = {"feder-cr/invisible_playwright_mcp",   # bot-detection evasion tooling
+        "openai/codex", "pq-code-package/mlkem-native", "PQClean/PQClean", "huggingface/transformers",
         "huggingface/trl", "rust-lang/rust", "streamlit/streamlit", "microsoft/playwright", "n8n-io/n8n",
         "openai/openai-python", "openai/openai-agents-python", "openai/openai-node", "bojieli/ai-agent-book"}
 
@@ -171,15 +172,17 @@ def pick_repos(n: int, reanalyze_days: float | None = None) -> list[str]:
                 helped.append(r["full_name"])
     except Exception as e:
         log.warn(STAGE, f"help-wanted pick failed: {e}")
-    picked = []
+    per_domain: list[list[str]] = []
     for dom in domains:
-        for r in rank(limit=60, domain=dom):
-            if ok(r):
-                picked.append((r.get("score") or 0, r["full_name"]))
-    picked.sort(reverse=True)
+        per_domain.append([r["full_name"] for r in rank(limit=int(config.setting("DAILY_RANK_DEPTH")), domain=dom) if ok(r)])
+    picked = []                       # round-robin across domains so one high-scoring domain does not take every slot
+    while any(per_domain) and len(helped) + len(picked) < n:
+        for lst in per_domain:
+            if lst:
+                picked.append(lst.pop(0))
     if helped:
         log.info(STAGE, f"help-wanted repos this run: {helped}")
-    return (helped + [f for _, f in picked])[:n]
+    return (helped + picked)[:n]
 
 
 # ---------------------------------------------------------------- phase 3/4: scout + build
