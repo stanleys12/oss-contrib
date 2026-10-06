@@ -186,6 +186,35 @@ def draft(c: dict) -> dict:
 
 
 # ---------------------------------------------------------------- apply + PR (gated)
+HUMANIZE = """Rewrite this pull request description for the GitHub Advisory Database so it reads like a regular contributor wrote it quickly, not a formal report. Same facts. Keep every URL, every GHSA and CVE id, and any commit SHA or CWE id exactly as written.
+
+Rules: first person, short plain sentences, a little informal is fine. No em or en dashes. Don't start with "This PR". Avoid "comprehensive", "furthermore", "additionally". Two to four sentences. Every link that was there stays.
+
+Description:
+__BODY__
+
+Answer with JSON: {"body": "..."}"""
+
+
+def _humanize(body: str, ghsa: str) -> str:
+    import re as _re
+    from .claude_runner import run_claude, extract_json
+    try:
+        r = run_claude(HUMANIZE.replace("__BODY__", body), config.ROOT, model="sonnet", max_turns=2, stage=STAGE, repo=ghsa,
+                       allowed_tools=[], json_schema={"type": "object", "required": ["body"], "properties": {"body": {"type": "string"}}},
+                       max_budget_usd=0.5, timeout_s=300)
+        d = r.structured if isinstance(r.structured, dict) else extract_json(r.text)
+        if isinstance(d, dict) and d.get("body"):
+            keep = set(_re.findall(r"https?://\S+", body)) | set(_re.findall(r"GHSA-[\w-]+|CVE-[\d-]+", body))
+            out = d["body"].replace("—", ", ").replace("–", "-")
+            if all(k.rstrip(").,") in out for k in keep):
+                return out
+            log.warn(STAGE, f"{ghsa}: humanized body dropped a link; keeping original")
+    except Exception as e:
+        log.warn(STAGE, f"{ghsa}: humanize failed ({e}); keeping original")
+    return body
+
+
 def _apply(record: dict, pointer: str, addition) -> dict:
     r = json.loads(json.dumps(record))
     items = addition if isinstance(addition, list) else [addition]
