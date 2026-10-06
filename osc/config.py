@@ -87,6 +87,7 @@ DEFAULTS = {
     # ---- maintenance of the owner's own public repos (user requirement 2026-10-04) ----
     "MAINTAIN_MODEL": "opus",
     "MAINTAIN_BUDGET_USD": 5.0,
+    "MAINTAIN_DAILY": ["skilljail"],   # user 10-05: maintained every day, on top of the rotation
     "DISCUSS_BUDGET_USD": 2.5,
     "DISCUSS_DAILY_USD": 25.0,     # user 10-05: push for Galaxy Brain this week
     "DISCUSS_PER_RUN": 2,         # answers per run, 3 runs a day; every answer still has to pass the checker

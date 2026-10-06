@@ -9,6 +9,11 @@ __LOG__
 ## Areas touched by the last maintenance runs (prefer something else if there is real work elsewhere)
 __RECENT__
 
+## Where to look today
+Start in **`__FOCUS__`**: this part of the repo has gone the longest without a maintenance change, so read it closely first (code, tests, docs and examples that belong to it). If, after a real look, nothing there is worth changing, move on in this order: __NEXT_AREAS__. Do not invent work in the focus area just because it is the focus.
+
+You may create new files or directories when the improvement needs them: a missing test module, a new example skill that exercises an untested feature, a doc for an undocumented command, a fixture. New files follow the same rules as edits: real value, matching the repo's style.
+
 ## What counts as worthwhile, roughly in priority order
 1. A real bug: wrong output, a crash path, an unhandled edge case you can reproduce. Add a test that fails before and passes after.
 2. A failing, flaky or missing test for important behaviour that currently has none.

@@ -98,7 +98,29 @@ def _clone(name: str) -> Path:
 def pick(st: dict, only: str | None = None) -> str:
     if only:
         return only
-    return min(REPOS, key=lambda n: st["last"].get(n, 0))
+    daily = set(config.setting("MAINTAIN_DAILY"))
+    return min((n for n in REPOS if n not in daily), key=lambda n: st["last"].get(n, 0))
+
+
+_SKIP_AREAS = {".git", ".venv", "node_modules", "dist", "build", "__pycache__", ".pytest_cache", ".benchmarks", "data", "reports"}
+
+
+def areas(d: Path) -> list[str]:
+    """Top-level directories that git tracks, plus the root files as one area."""
+    tracked = _git(d, "ls-files").split()
+    tops = {f.split("/", 1)[0] for f in tracked if "/" in f}
+    out = sorted(t for t in tops if t not in _SKIP_AREAS and not t.endswith(".egg-info"))
+    return out + ["(root files)"]
+
+
+def focus(name: str, d: Path, st: dict) -> list[str]:
+    """Areas ordered by how long since a maintenance commit touched them, oldest first."""
+    seen = st.setdefault("areas", {}).setdefault(name, {})
+    return sorted(areas(d), key=lambda a: seen.get(a, 0))
+
+
+def _area_of(path: str) -> str:
+    return path.split("/", 1)[0] if "/" in path else "(root files)"
 
 
 def run(dry: bool = False, only: str | None = None) -> dict:
@@ -123,9 +145,10 @@ def run(dry: bool = False, only: str | None = None) -> dict:
             for h in st["history"][-20:]:
                 if h["repo"] == name and h["summary"].startswith("dropped:"):
                     h["lead_done"] = True
+        order = focus(name, d, st)
         p = (config.PROMPTS_DIR / "maintain.md").read_text()
         for k, v in {"__NAME__": name, "__URL__": f"https://github.com/stanleys12/{name}", "__ABOUT__": about,
-                     "__LOG__": _git(d, "log", "-15", "--format=%h %ad %s", "--date=short"), "__RECENT__": recent,
+                     "__LOG__": _git(d, "log", "-15", "--format=%h %ad %s", "--date=short"), "__RECENT__": recent, "__FOCUS__": order[0], "__NEXT_AREAS__": ", ".join(order[1:4]),
                      "__TEST__": test + ("" if before.returncode == 0 else f"   (CURRENTLY FAILING: {(before.stdout + before.stderr)[-600:]})")}.items():
             p = p.replace(k, v)
         res = run_claude(p, d, model=config.setting("MAINTAIN_MODEL"), max_turns=120, stage=STAGE, repo=name, skip_permissions=True,
@@ -136,6 +159,10 @@ def run(dry: bool = False, only: str | None = None) -> dict:
         rec["cost"] = round(res.cost_usd, 2)
         a = res.structured if isinstance(res.structured, dict) else extract_json(res.text) or {}
         rec["summary"], rec["area"] = a.get("summary", res.error[:300]), a.get("area", "")
+        rec["focus"] = order[0]
+        st.setdefault("areas", {}).setdefault(name, {}).setdefault(order[0], 0)
+        if not _git(d, "log", "--format=%H", f"{old}..HEAD").split():
+            st["areas"][name][order[0]] = time.time()      # looked at and found nothing: move on to the next area tomorrow
         new = _git(d, "log", "--format=%H", f"{old}..HEAD").split()
         if _git(d, "status", "--porcelain").strip():
             _git(d, "reset", "-q", "--hard", "HEAD")                # uncommitted leftovers are dropped
@@ -159,6 +186,9 @@ def run(dry: bool = False, only: str | None = None) -> dict:
         if r.returncode != 0:
             raise RuntimeError(f"push failed: {r.stderr[-300:].replace(config.github_token(), '***')}")
         rec.update(changed=True, commit=_git(d, "log", "-1", "--format=%h %s").strip())
+        for a in {_area_of(f) for f in touched}:
+            st.setdefault("areas", {}).setdefault(name, {})[a] = time.time()
+        rec["area"] = ", ".join(sorted({_area_of(f) for f in touched}))
         log.ok(STAGE, f"{name}: pushed {rec['commit']}", repo=name)
         # bring the live project along when that is safe; otherwise say so
         if live.exists() and not _sh(["git", "status", "--porcelain", "--untracked-files=no"], live).stdout.strip():
@@ -178,6 +208,22 @@ def run(dry: bool = False, only: str | None = None) -> dict:
             send_digest(f"[maintain] {name}: {rec['commit']}", f"{rec['summary']}\n\nhttps://github.com/stanleys12/{name}/commits/main\nLive directory: {rec.get('live')}\nCost ${rec['cost']}\n")
 
 
+def daily(dry: bool = False) -> list[dict]:
+    """The scheduled run: every repo in MAINTAIN_DAILY, plus the next one in the rotation."""
+    st = _state()
+    names = list(config.setting("MAINTAIN_DAILY")) + [pick(st)]
+    if dry:
+        out = []
+        for n in names:
+            d = CLONES / n
+            out.append({"repo": n, "focus_order": focus(n, d, st) if d.exists() else "(cloned on first run)"})
+        return out
+    return [run(only=n) for n in names]
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
-    print(json.dumps(run(dry="--dry" in a, only=a[a.index("--repo") + 1] if "--repo" in a else None), indent=1, default=str))
+    if "--repo" in a:
+        print(json.dumps(run(dry="--dry" in a, only=a[a.index("--repo") + 1]), indent=1, default=str))
+    else:
+        print(json.dumps(daily(dry="--dry" in a), indent=1, default=str))
