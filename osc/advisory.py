@@ -255,13 +255,26 @@ def prepare(ghsa: str, force: bool = False) -> dict:
     a["pr_body"] = _humanize(a["pr_body"], ghsa)
     new = _apply(a["record"], a["json_pointer"], a["addition"])
     body = ser(new)
-    # verify we changed exactly what we meant and nothing else
-    import difflib
-    diff = "".join(difflib.unified_diff(ser(a["record"]).splitlines(True), body.splitlines(True), lineterm="\n"))
-    added = [l for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++")]
-    removed = [l for l in diff.splitlines() if l.startswith("-") and not l.startswith("---")]
-    if removed or not added:
-        raise RuntimeError(f"edit is not a clean single addition (added {len(added)}, removed {len(removed)})")
+    # verify the ONLY change is our addition: strip the added items back off and confirm we land exactly on the
+    # original record (format-independent, so an empty [] growing into a populated array is fine)
+    check = json.loads(body)
+    orig = a["record"]
+    n = len(_items)
+    if a["json_pointer"] == "/references/-":
+        had = "references" in orig
+        check["references"] = check["references"][:-n]
+        if not had:
+            check.pop("references", None)
+    else:
+        had_ds = "database_specific" in orig
+        had_cwe = had_ds and "cwe_ids" in orig["database_specific"]
+        check["database_specific"]["cwe_ids"] = check["database_specific"]["cwe_ids"][:-n]
+        if not had_cwe:
+            check["database_specific"].pop("cwe_ids", None)
+        if not had_ds:
+            check.pop("database_specific", None)
+    if check != orig:
+        raise RuntimeError("edit would change more than the single addition; not submitting")
     _gh("api", "-X", "POST", f"repos/{DB}/forks", timeout=120)
     time.sleep(3)
     base = _gh("api", f"repos/{DB}", "-q", ".default_branch")[1].strip()
