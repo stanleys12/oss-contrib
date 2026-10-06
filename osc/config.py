@@ -109,7 +109,7 @@ DEFAULTS = {
     "DISCLOSE_AUTO_SUBMIT": False,  # never auto-send a private report; the user confirms each one
     "DISCLOSE_MODEL": "opus",
     "DISCLOSE_BUDGET_USD": 2.0,
-    "DAILY_DOMAINS": ["llm-inference", "post-training", "security", "agents-mcp", "ml-core", "crypto-pq"],
+    "DAILY_DOMAINS": ["llm-inference", "post-training", "security", "security-vendors", "agents-mcp", "ml-core", "crypto-pq"],
     "DAILY_MIN_PRIORITY": 0.6,    # opportunity priority floor to build
     "DAILY_MIN_ACCEPT": 0.5,      # scout's accept-likelihood floor to build
     "DAILY_REANALYZE_DAYS": 10,   # do not re-scout a repo more often than this
@@ -321,6 +321,25 @@ DOMAINS: dict[str, dict] = {
             "optuna/optuna", "huggingface/safetensors", "ggml-org/ggml", "triton-lang/triton",
             "openai/whisper", "huggingface/parler-tts", "modular/modular", "zml/zml",
                     "google/sentencepiece", "pytorch/vision", "pytorch/audio", "pytorch/data", "huggingface/tokenizers",
+        ],
+    },
+    "security-vendors": {
+        "label": "Security companies' open source (Cisco, Palo Alto, CrowdStrike, Rapid7, Snyk, Trail of Bits, ...)",
+        "topics": ["security", "security-tools", "vulnerability", "vulnerability-scanner", "security-scanner",
+                   "devsecopts", "sast", "dast", "infosec", "cybersecurity", "cloud-security", "container-security"],
+        "keywords": ["security scanner", "vulnerability", "sast", "dast", "secrets detection", "misconfiguration",
+                     "cloud security", "container security", "sbom", "cve", "exploit", "detection", "threat"],
+        "seeds": [
+            "aquasecurity/trivy", "aquasecurity/kube-bench", "aquasecurity/tfsec", "aquasecurity/kube-hunter",
+            "aquasecurity/tracee", "aquasecurity/cloudsploit", "aquasecurity/trivy-operator", "aquasecurity/trivy-action",
+            "projectdiscovery/nuclei", "projectdiscovery/katana", "projectdiscovery/subfinder", "projectdiscovery/httpx",
+            "projectdiscovery/naabu", "projectdiscovery/uncover", "projectdiscovery/notify", "projectdiscovery/nuclei-templates",
+            "trailofbits/algo", "trailofbits/graphtage", "trailofbits/buttercup", "trailofbits/pip-audit", "trailofbits/it-depends",
+            "falcosecurity/falco", "falcosecurity/falcoctl", "wazuh/wazuh", "wazuh/wazuh-dashboard",
+            "snyk/cli", "snyk/driftctl", "rapid7/metasploit-framework", "rapid7/metasploit-payloads",
+            "PaloAltoNetworks/pan-os-python", "PaloAltoNetworks/pan-python", "crowdstrike/falconpy", "crowdstrike/caracara",
+            "cisco/mongo_fdw", "cisco/openh264", "tenable/integration-jira-cloud", "okta/okta-sdk-python",
+            "OWASP/Nettacker", "OWASP/threat-dragon", "OWASP/wrongsecrets", "Juniper/contrail-controller",
         ],
     },
     "crypto-pq": {
