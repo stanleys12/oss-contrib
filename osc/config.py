@@ -91,7 +91,7 @@ DEFAULTS = {
     "DISCUSS_BUDGET_USD": 2.5,
     "DISCUSS_DAILY_USD": 25.0,     # user 10-05: push for Galaxy Brain this week
     "DISCUSS_PER_RUN": 2,         # answers per run, 3 runs a day; every answer still has to pass the checker
-    "DISCUSS_EXTRA_REPOS": 70,    # best-ranked repos in our domains, on top of the ones we contribute to
+    "DISCUSS_EXTRA_REPOS": 150,    # best-ranked repos in our domains, on top of the ones we contribute to
     "DISCUSS_MIN_ACCEPT_RATE": 0.25,  # skip repos where askers rarely mark answers
     "DISCUSS_MAX_AGE_DAYS": 21,
     "DAILY_DOMAINS": ["llm-inference", "post-training", "security", "agents-mcp", "ml-core", "crypto-pq"],

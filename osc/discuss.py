@@ -149,6 +149,9 @@ def candidates(me: str, st: dict) -> list[dict]:
                 continue                        # a maintainer is already on it
             if d["comments"]["totalCount"] > 4:
                 continue
+            asker = (d.get("author") or {}).get("login")
+            if cs and (cs[-1].get("author") or {}).get("login") != asker:
+                continue                        # someone replied and the asker has not come back: probably answered
             repo = d["repository"]["nameWithOwner"]
             rate = accept_rate(repo, st)
             if rate < float(config.setting("DISCUSS_MIN_ACCEPT_RATE")) and repo not in mine:

@@ -147,3 +147,23 @@ def get(refresh: bool = False) -> dict:
                 _lock.release()
         threading.Thread(target=bg, daemon=True).start()
     return data
+
+
+def report() -> tuple[list[str], list[str]]:
+    """Digest lines for every badge, plus what was newly earned since the last report (badge or tier)."""
+    from . import db
+    d = get(refresh=True)
+    prev = db.kv_get("badges_last") or {}
+    now, lines, news = {}, [], []
+    for b in d["badges"]:
+        key = b.get("tier") or ("earned" if b["earned"] else "")
+        now[b["name"]] = key
+        if key and prev.get(b["name"]) != key and b["name"] in prev:
+            news.append(f"{b['name']}: {key if b.get('tier') else 'unlocked'}")
+        if b["tiers"]:
+            nxt = f"{b['count']}/{b['next']} for {b['next_name']}" if b.get("next") else "top tier"
+            lines.append(f"  - {b['name']}: {'earned' if b['earned'] else 'not yet'}{' (' + b['tier'] + ')' if b.get('tier') else ''}, {nxt}")
+        else:
+            lines.append(f"  - {b['name']}: {'earned' if b['earned'] else 'not yet'}")
+    db.kv_set("badges_last", now)
+    return lines, news

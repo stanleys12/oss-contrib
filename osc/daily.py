@@ -354,6 +354,15 @@ def compose_digest(day: str, prs: dict, scouted: dict, built: list[dict], disk: 
             L.append(f"  - {a['pr']}  {a['url']}")
             L += [f"      {l}" for l in a["lines"]]
         L.append("")
+    try:
+        from .badges import report
+        blines, bnews = report()
+        if bnews:
+            L += ["NEW BADGES / TIERS:"] + [f"  - {n}" for n in bnews] + [""]
+            send_digest(f"[oss-contrib] new GitHub badge: {', '.join(bnews)}", "\n".join(bnews) + "\n\nhttps://github.com/stanleys12?tab=achievements\n")
+        L += ["BADGES:"] + blines + [""]
+    except Exception as e:
+        log.warn(STAGE, f"badge report failed: {e}")
     if prs.get("followups"):
         L += ["ANSWERED AUTOMATICALLY since last run (replies posted, fixes pushed):"] + prs["followups"] + [""]
     if prs["activity"]:
