@@ -611,10 +611,16 @@ def rerequest(c: dict, pr: dict, me: str, ps: dict, now: float, dry: bool = Fals
         if not dry:
             rc, o = _gh("api", "-X", "POST", f"repos/{c['repo']}/pulls/{pr['number']}/requested_reviewers", "-f", f"reviewers[]={who}", "-q", ".html_url")
             if rc != 0:
-                log.warn(STAGE, f"#{pr['number']}: re-request to {who} failed: {o[:120]}", repo=c["repo"])
-                continue
+                # outside contributors can't use re-request review; one short comment is the usual substitute
+                body = (f"@{who} the follow-up commit dismissed your approval, so this needs another look whenever you have a minute."
+                        if r["state"] == "DISMISSED" else
+                        f"@{who} I pushed the changes you asked for, so this is ready for another look whenever you have a minute.")
+                rc, o = _gh("api", "-X", "POST", f"repos/{c['repo']}/issues/{pr['number']}/comments", "-f", f"body={body}", "-q", ".html_url")
+                if rc != 0:
+                    log.warn(STAGE, f"#{pr['number']}: could not nudge {who}: {o[:120]}", repo=c["repo"])
+                    continue
             done.append(key)
-            log.ok(STAGE, f"#{pr['number']}: re-requested review from {who} (their {r['state'].lower()} review predates our last push)", repo=c["repo"])
+            log.ok(STAGE, f"#{pr['number']}: asked {who} for another look ({r['state'].lower()} review predates our last push): {o.strip()[:100]}", repo=c["repo"])
         out.append(who)
     return out
 
