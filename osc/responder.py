@@ -585,6 +585,40 @@ def digest_lines(since_ts: float) -> list[str]:
     return L
 
 
+def rerequest(c: dict, pr: dict, me: str, ps: dict, now: float, dry: bool = False) -> list[str]:
+    """Re-request review (GitHub's button) from a maintainer whose approval was dismissed or whose change
+    request we have since addressed, once per reviewer, after RESPOND_REREQUEST_DAYS without a reaction."""
+    head = ((pr.get("commits") or {}).get("nodes") or [{}])[-1].get("commit") or {}
+    head_ts = _epoch(head.get("committedDate"))
+    if now - head_ts < float(config.setting("RESPOND_REREQUEST_DAYS")) * 86400:
+        return []
+    latest: dict[str, dict] = {}
+    for r in (pr.get("reviews") or {}).get("nodes") or []:
+        who, bot = _who(r)
+        if who == me or bot or r["state"] == "COMMENTED" and not (r.get("body") or "").strip():
+            continue
+        latest[who] = r
+    done = ps.setdefault("rerequested", [])
+    out = []
+    for who, r in latest.items():
+        key = f"{who}@{head.get('oid', '')[:12]}"
+        if r["state"] not in ("DISMISSED", "CHANGES_REQUESTED") or key in done:
+            continue
+        if r["state"] == "CHANGES_REQUESTED" and _epoch(r["submittedAt"]) >= head_ts:
+            continue                            # nothing pushed since they asked for changes (DISMISSED already implies a newer push)
+        if r["state"] == "CHANGES_REQUESTED" and r.get("authorAssociation") not in ("MEMBER", "OWNER", "COLLABORATOR"):
+            continue                            # a dismissed approval counted toward merging, whatever the label; org membership is often private
+        if not dry:
+            rc, o = _gh("api", "-X", "POST", f"repos/{c['repo']}/pulls/{pr['number']}/requested_reviewers", "-f", f"reviewers[]={who}", "-q", ".html_url")
+            if rc != 0:
+                log.warn(STAGE, f"#{pr['number']}: re-request to {who} failed: {o[:120]}", repo=c["repo"])
+                continue
+            done.append(key)
+            log.ok(STAGE, f"#{pr['number']}: re-requested review from {who} (their {r['state'].lower()} review predates our last push)", repo=c["repo"])
+        out.append(who)
+    return out
+
+
 # ---------------------------------------------------------------- main
 def run(dry: bool = False, draft: bool = False, force: bool = False, only: str | None = None) -> dict:
     db.init()
@@ -618,6 +652,9 @@ def run(dry: bool = False, draft: bool = False, force: bool = False, only: str |
             if not pr or pr.get("state") != "OPEN":
                 continue                                # merges and closures are recorded by the dashboard poller and the daily run
             ps = st["prs"].setdefault(pr["url"], {})
+            rr = rerequest(c, pr, me, ps, now, dry=dry)
+            if rr:
+                waiting.append({"pr": f"{c['repo']}#{pr['number']}", "url": pr["url"], "rerequested": rr})
             items = collect(pr, me, ps, now)
             if first and not only:
                 # CI that was already red when this was switched on was looked at by hand; only new failures count

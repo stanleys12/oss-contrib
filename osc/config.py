@@ -80,6 +80,7 @@ DEFAULTS = {
     "RESPOND_VERIFY_BUDGET_USD": 2.0,
     "RESPOND_DAILY_USD": 60.0,    # all follow-up work per day (own ledger in data/respond_state.json)
     "RESPOND_MAX_ROUNDS_PER_PR_DAY": 3,
+    "RESPOND_REREQUEST_DAYS": 3,  # re-request review once, this long after our push made a maintainer's review stale
     # ---- Discussions answers toward the Galaxy Brain badge (user goal 2026-10-04) ----
     "DISCUSS_AUTO_POST": True,    # user 10-04: "whatever you think is best" -> on, checker-gated, max DISCUSS_PER_RUN a day
     "DISCUSS_DISCLOSURE": "(I looked this up in the code with help from an AI assistant; the links are to the lines I checked.)",
