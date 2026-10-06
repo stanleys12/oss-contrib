@@ -310,6 +310,18 @@ def try_open(cid: str, allow_fix: bool = True) -> dict:
         return {"change": cid, "opened": False, "why": why}
     if not config.setting("AUTO_OPEN"):
         return {"change": cid, "opened": False, "why": ["AUTO_OPEN is off"]}
+    # a genuine not-yet-public security fix must be disclosed privately, never opened as a public PR
+    if config.setting("DISCLOSE_CHECK"):
+        opp = db.row("SELECT kind FROM opportunities o JOIN changes c ON c.opportunity_id=o.id WHERE c.id=?", (cid,))
+        if opp and (opp.get("kind") or "") == "security":
+            try:
+                from .disclose import handle_security
+                d = handle_security(cid)
+                if d["decision"] != "public_pr":
+                    return {"change": cid, "opened": False, "why": [f"security: routed to {d['decision']} disclosure, not a public PR"]}
+            except Exception as e:
+                log.warn(STAGE, f"{cid}: disclosure check failed, holding: {e}")
+                return {"change": cid, "opened": False, "why": [f"disclosure check failed: {e}"]}
     return {"change": cid, "opened": True, "url": open_pr(cid)}
 
 
@@ -350,6 +362,8 @@ def blocker(c: dict, open_repos: set[str] | None = None) -> str:
     if full in (open_repos if open_repos is not None else _open_repos()):
         return "you already have an open PR in this repo"
     note = c.get("status_note") or ""
+    if "SECURITY-DISCLOSURE" in note:
+        return "security finding: needs private disclosure, not a public PR (see data/disclose_state.json)"
     for marker in ("HOLD:", "HOLD ", "BLOCKED"):
         i = note.rfind(marker)
         if i >= 0:

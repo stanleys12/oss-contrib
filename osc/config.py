@@ -99,6 +99,15 @@ DEFAULTS = {
     "DAILY_RANK_DEPTH": 400,      # how far down each domain ranking the picker looks (60 ran dry 10-06: 0 eligible, 355 at 400)
     "DAILY_HELPWANTED_REPOS": 4,  # user 10-06: slots per run for projects that ask for outside help (osc/helpwanted.py)
     "HELPWANTED_MIN_ISSUES": 2,   # a project must have at least this many fresh, unassigned help-wanted issues
+    # ---- advisory-database corrections (user 2026-10-06, Security advisory credit badge) ----
+    "ADVISORY_AUTO_SUBMIT": False,  # drafts only until the user confirms; prepare() stays gated
+    "ADVISORY_MODEL": "opus",
+    "ADVISORY_BUDGET_USD": 3.0,
+    # ---- responsible disclosure of non-public security findings (route 2) ----
+    "DISCLOSE_CHECK": True,         # classify every security change before a public PR
+    "DISCLOSE_AUTO_SUBMIT": False,  # never auto-send a private report; the user confirms each one
+    "DISCLOSE_MODEL": "opus",
+    "DISCLOSE_BUDGET_USD": 2.0,
     "DAILY_DOMAINS": ["llm-inference", "post-training", "security", "agents-mcp", "ml-core", "crypto-pq"],
     "DAILY_MIN_PRIORITY": 0.6,    # opportunity priority floor to build
     "DAILY_MIN_ACCEPT": 0.5,      # scout's accept-likelihood floor to build
