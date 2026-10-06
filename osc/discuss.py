@@ -337,6 +337,10 @@ def run(dry: bool = False) -> dict:
         for d in cands:
             if len(done) >= int(config.setting("DISCUSS_PER_RUN")) or float(st["ledger"].get(day, 0)) >= float(config.setting("DISCUSS_DAILY_USD")):
                 break
+            t0 = time.mktime(time.strptime(day, "%Y-%m-%d"))
+            if sum(1 for r in st["drafts"] if str(r.get("posted", "")).startswith("http") and r["ts"] >= t0) >= int(config.setting("DISCUSS_MAX_PER_DAY")):
+                log.info(STAGE, "daily answer cap reached; drafting stops until tomorrow")
+                break
             st["seen"][d["url"]] = time.time()
             try:
                 a, cost = draft(d)
