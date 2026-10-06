@@ -77,6 +77,8 @@ def ranked(max_age_days: float = 7) -> list[dict]:
         hw = raw.get("help_wanted") or {}
         if time.time() - hw.get("ts", 0) > max_age_days * 86400:
             continue
+        if (r["stars"] or 0) < float(config.setting("STRONG_MIN_STARS")) or r["archived"]:
+            continue                        # same bar as auto-open; tiny repos with many self-filed issues are noise
         out.append({**r, "raw": raw, "hw_issues": hw.get("issues", 0)})
     return sorted(out, key=lambda r: (r["hw_issues"], r["score"] or 0), reverse=True)
 
