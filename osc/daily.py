@@ -450,7 +450,7 @@ def run(dry: bool = False) -> dict:
         hk = cleanup(dry_run=dry)
         # 1. PR states + activity
         prs = refresh_prs(state.get("last_run", t_start - 86400))
-        if not dry and t_start - float((db.kv_get("helpwanted_last") or {}).get("ts", 0)) > 3 * 86400:
+        if not dry and t_start - float((db.kv_get("helpwanted_last") or {}).get("ts", 0)) > 20 * 3600:
             try:
                 from .helpwanted import refresh
                 refresh()

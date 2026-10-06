@@ -97,7 +97,7 @@ DEFAULTS = {
     "DISCUSS_MIN_ACCEPT_RATE": 0.25,  # skip repos where askers rarely mark answers
     "DISCUSS_MAX_AGE_DAYS": 21,
     "DAILY_HELPWANTED_REPOS": 4,  # user 10-06: slots per run for projects that ask for outside help (osc/helpwanted.py)
-    "HELPWANTED_MIN_ISSUES": 3,   # a project must have at least this many fresh, unassigned help-wanted issues
+    "HELPWANTED_MIN_ISSUES": 2,   # a project must have at least this many fresh, unassigned help-wanted issues
     "DAILY_DOMAINS": ["llm-inference", "post-training", "security", "agents-mcp", "ml-core", "crypto-pq"],
     "DAILY_MIN_PRIORITY": 0.6,    # opportunity priority floor to build
     "DAILY_MIN_ACCEPT": 0.5,      # scout's accept-likelihood floor to build

@@ -36,7 +36,7 @@ def search(gh: GitHub) -> dict[str, int]:
             q = (f"label:{label} is:issue is:open no:assignee archived:false language:{lang} "
                  f"comments:<8 created:>={_iso(150)} updated:>={_iso(45)}")
             try:
-                for it in gh.search_issues(q, per_page=100):
+                for it in gh.search_issues(q, per_page=100, pages=2):
                     repo = it["repository_url"].split("/repos/", 1)[1]
                     counts[repo] += 1
             except Exception as e:
