@@ -129,7 +129,7 @@ async function pollNow(btn) { btn.disabled = true; btn.textContent = 'checking�
 async function vOverview() {
   const o = overview || await api('/overview'); const c = o.counts;
   setTimeout(() => { refreshToday(); loadBadges(); if (!todayTimer) todayTimer = setInterval(refreshToday, 30000); }, 0);
-  const tiles = [['repos scanned', c.repos], ['analyzed', c.repos_analyzed], ['opportunities', c.opportunities], ['changes built', c.changes], ['ready to open', c.changes_ready], ['blocked', c.changes_blocked], ['submitted', c.changes_submitted], ['agent spend', '$' + c.cost_usd]];
+  const tiles = [['repos scanned', c.repos], ['ever analyzed', c.repos_analyzed], ['opportunities', c.opportunities], ['changes built', c.changes], ['ready to open', c.changes_ready], ['blocked', c.changes_blocked], ['submitted', c.changes_submitted], ['agent spend (all lanes)', '$' + c.cost_usd]];
   return `<h1>Overview</h1><div class="sub">Scan → build → review → opens PRs on its own (${o.settings.DAILY_MIN_PRS}–${o.settings.DAILY_TARGET_PRS} a day). Last repo-discovery scan: ${o.last_scan ? `${fmtT(o.last_scan.ts)} (${o.last_scan.n} repos)` : 'never'}</div>
   <div id="today"><div class="card muted">loading today…</div></div>
   <div class="grid-today" style="margin-top:12px;grid-template-columns:1fr 1fr"><div id="badges"><div class="card muted">loading badges…</div></div><div id="merged"><div class="card muted">loading merged PRs…</div></div></div>

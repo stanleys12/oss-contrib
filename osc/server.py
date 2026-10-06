@@ -43,6 +43,19 @@ def index():
 
 
 
+def _total_spend() -> float:
+    """True all-lanes agent spend: every run logs 'cost=$X' once to events (scout, build, review, compliance,
+    open, discuss, respond, advisory, maintain, disclose), so the sum has no double-counting. Events are never
+    pruned, so this is complete from day one."""
+    import re
+    tot = 0.0
+    for r in db.rows("SELECT message FROM events WHERE message LIKE '%cost=$%'"):
+        m = re.search(r"cost=\$([0-9]+\.[0-9]+)", r["message"] or "")
+        if m:
+            tot += float(m.group(1))
+    return round(tot, 2)
+
+
 def _ready_split() -> dict:
     """Built-and-pushed changes split into ones that can be opened now vs ones blocked (CLA, Gerrit, hold, ...)."""
     from .opener import blocker, _open_repos
@@ -56,13 +69,13 @@ def _ready_split() -> dict:
 def overview():
     counts = {
         "repos": db.row("SELECT COUNT(*) c FROM repos")["c"],
-        "repos_analyzed": db.row("SELECT COUNT(*) c FROM repos WHERE status='analyzed'")["c"],
+        "repos_analyzed": db.row("SELECT COUNT(*) c FROM repos WHERE analyzed_at IS NOT NULL")["c"],
         "opportunities": db.row("SELECT COUNT(*) c FROM opportunities")["c"],
         "opps_proposed": db.row("SELECT COUNT(*) c FROM opportunities WHERE status='proposed'")["c"],
         "changes": db.row("SELECT COUNT(*) c FROM changes")["c"],
         **_ready_split(),
         "changes_submitted": db.row("SELECT COUNT(*) c FROM changes WHERE status='submitted'")["c"],
-        "cost_usd": round(db.row("SELECT COALESCE(SUM(cost_usd),0) c FROM changes")["c"], 2),
+        "cost_usd": _total_spend(),
     }
     by_domain = db.rows("SELECT domain, COUNT(*) n, ROUND(AVG(score),3) avg_score FROM repos GROUP BY domain ORDER BY n DESC")
     current = db.row("SELECT * FROM jobs WHERE status='running' ORDER BY id DESC LIMIT 1")
