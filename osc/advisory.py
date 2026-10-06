@@ -27,7 +27,7 @@ from pathlib import Path
 
 from . import config, db, log
 from .claude_runner import extract_json, run_claude
-from .daily import PROJECT
+from .daily import PROJECT, send_digest
 
 STAGE = "advisory"
 STATE_F = PROJECT / "data" / "advisory_state.json"
@@ -188,10 +188,11 @@ def draft(c: dict) -> dict:
 # ---------------------------------------------------------------- apply + PR (gated)
 def _apply(record: dict, pointer: str, addition) -> dict:
     r = json.loads(json.dumps(record))
+    items = addition if isinstance(addition, list) else [addition]
     if pointer == "/references/-":
-        r.setdefault("references", []).append(addition)
+        r.setdefault("references", []).extend(items)
     elif pointer == "/database_specific/cwe_ids/-":
-        r.setdefault("database_specific", {}).setdefault("cwe_ids", []).append(addition)
+        r.setdefault("database_specific", {}).setdefault("cwe_ids", []).extend(items)
     else:
         raise RuntimeError(f"unsupported pointer {pointer}")
     return r
@@ -207,10 +208,22 @@ def prepare(ghsa: str, force: bool = False) -> dict:
     if not (config.setting("ADVISORY_AUTO_SUBMIT") or force):
         return {"ghsa": ghsa, "submitted": False, "why": "ADVISORY_AUTO_SUBMIT is off"}
     rc, me = _gh("api", "user", "-q", ".login"); me = me.strip()
+    # re-fetch the advisory fresh: it may have changed, or the correction may already be in now
+    loc = _osv_path(ghsa, (a.get("record") or {}).get("published", "")[:10])
+    if loc:
+        a["path"], a["record"], a["blob_sha"], a["raw"] = loc
+    _items = a["addition"] if isinstance(a["addition"], list) else [a["addition"]]
+    _rec = json.dumps(a["record"])
+    _items = [it for it in _items if json.dumps(it) not in _rec]
+    if not _items:
+        st["seen"][ghsa] = time.time(); _save(st)
+        return {"ghsa": ghsa, "submitted": False, "why": "the correction is already in the record now"}
+    a["addition"] = _items if len(_items) > 1 else _items[0]
     def ser(d):
         return json.dumps(d, indent=2, ensure_ascii=False)
     if a.get("raw") is not None and ser(a["record"]) != a["raw"]:
         raise RuntimeError("our serialization does not match the repo file byte-for-byte; not editing")
+    a["pr_body"] = _humanize(a["pr_body"], ghsa)
     new = _apply(a["record"], a["json_pointer"], a["addition"])
     body = ser(new)
     # verify we changed exactly what we meant and nothing else
@@ -275,9 +288,43 @@ def run_drafts(n: int) -> dict:
     return {"drafted": [{"ghsa": d["ghsa"], "summary": d.get("summary"), "verdict": d.get("verdict")} for d in done]}
 
 
+def daily() -> dict:
+    """Scheduled run: top up drafts, then submit the verified ones up to the daily cap. Runs from launchd,
+    so it submits on its own (user 2026-10-06). One advisory per PR; a conservative cap keeps it from
+    looking like a flood to the database maintainers."""
+    db.init()
+    st = _state()
+    day = time.strftime("%Y-%m-%d")
+    sent_today = sum(1 for d in st["drafts"].values() if d.get("pr_url") and time.strftime("%Y-%m-%d", time.localtime(d.get("submitted_at", 0))) == day)
+    cap = int(config.setting("ADVISORY_MAX_PER_DAY"))
+    if sent_today < cap:
+        run_drafts(cap - sent_today + 2)
+        st = _state()
+    opened = []
+    for ghsa, a in list(st["drafts"].items()):
+        if sent_today + len(opened) >= cap:
+            break
+        if a.get("pr_url") or a.get("verdict") not in ("ok", "fix"):
+            continue
+        try:
+            r = prepare(ghsa, force=True)
+        except Exception as e:
+            log.warn(STAGE, f"{ghsa}: submit failed: {e}")
+            st = _state(); st["drafts"].get(ghsa, {}).pop("record", None); continue
+        if r.get("submitted"):
+            st = _state(); st["drafts"][ghsa]["submitted_at"] = time.time(); _save(st)
+            opened.append(r["url"])
+    if opened:
+        send_digest(f"[oss-contrib] opened {len(opened)} advisory-database PR(s)",
+                    "Advisory corrections opened (toward the Security advisory credit badge):\n" + "\n".join("  " + u for u in opened) + "\n")
+    return {"opened": opened}
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
-    if "--find" in a:
+    if "--daily" in a:
+        print(json.dumps(daily(), indent=1, default=str))
+    elif "--find" in a:
         for c in candidates()[:40]:
             print(f"  {c['ghsa']}  {c['cve'] or '-':16s} {c['severity'] or '-':8s} {c['repo']:32s} [{c['gap']}]  {c['summary'][:50]}")
     elif "--submit" in a:

@@ -100,9 +100,10 @@ DEFAULTS = {
     "DAILY_HELPWANTED_REPOS": 4,  # user 10-06: slots per run for projects that ask for outside help (osc/helpwanted.py)
     "HELPWANTED_MIN_ISSUES": 2,   # a project must have at least this many fresh, unassigned help-wanted issues
     # ---- advisory-database corrections (user 2026-10-06, Security advisory credit badge) ----
-    "ADVISORY_AUTO_SUBMIT": False,  # drafts only until the user confirms; prepare() stays gated
+    "ADVISORY_AUTO_SUBMIT": True,   # user 2026-10-06: scheduled job submits on its own after self-verification
     "ADVISORY_MODEL": "opus",
     "ADVISORY_BUDGET_USD": 3.0,
+    "ADVISORY_MAX_PER_DAY": 3,      # cap PRs to github/advisory-database per day (a flood reads as spam)
     # ---- responsible disclosure of non-public security findings (route 2) ----
     "DISCLOSE_CHECK": True,         # classify every security change before a public PR
     "DISCLOSE_AUTO_SUBMIT": False,  # never auto-send a private report; the user confirms each one
