@@ -139,28 +139,47 @@ def _not_openable(r: dict) -> str:
 
 
 def pick_repos(n: int, reanalyze_days: float | None = None) -> list[str]:
+    """Best repos to scout now: up to DAILY_HELPWANTED_REPOS projects that are asking for outside help,
+    the rest from the ranked domain lists."""
     from .scanner import rank
     domains = config.setting("DAILY_DOMAINS")
     reanalyze = float(reanalyze_days if reanalyze_days is not None else config.setting("DAILY_REANALYZE_DAYS")) * 86400
     now = time.time()
     busy = {r["repo"] for r in db.rows("SELECT DISTINCT repo FROM changes WHERE status IN ('submitted','ready','prepared','approved')")}
-    seen, picked = set(), []
+    seen: set[str] = set()
+
+    def ok(r: dict) -> bool:
+        full = r["full_name"]
+        if full in seen or full in DENY or full in busy or r.get("archived"):
+            return False
+        seen.add(full)
+        raw = r.get("raw") if isinstance(r.get("raw"), dict) else json.loads(r.get("raw") or "{}")
+        if raw.get("ai_prohibited") or r.get("status") == "skipped" or needs_gpu(r):
+            return False
+        if config.setting("AUTO_OPEN") and _not_openable(r):
+            return False   # a PR there could never be opened automatically (CLA, weak repo, human-written text rule)
+        return (r.get("analyzed_at") or 0) <= now - reanalyze
+
+    helped: list[str] = []
+    try:
+        from .helpwanted import ranked
+        for r in ranked():
+            if len(helped) >= int(config.setting("DAILY_HELPWANTED_REPOS")):
+                break
+            full = db.row("SELECT * FROM repos WHERE full_name=?", (r["full_name"],))
+            if full and ok(full):
+                helped.append(r["full_name"])
+    except Exception as e:
+        log.warn(STAGE, f"help-wanted pick failed: {e}")
+    picked = []
     for dom in domains:
         for r in rank(limit=60, domain=dom):
-            full = r["full_name"]
-            if full in seen or full in DENY or full in busy or r.get("archived"):
-                continue
-            seen.add(full)
-            raw = r.get("raw") if isinstance(r.get("raw"), dict) else json.loads(r.get("raw") or "{}")
-            if raw.get("ai_prohibited") or r.get("status") == "skipped" or needs_gpu(r):
-                continue
-            if config.setting("AUTO_OPEN") and _not_openable(r):
-                continue   # a PR there could never be opened automatically (CLA, weak repo, human-written text rule)
-            if (r.get("analyzed_at") or 0) > now - reanalyze:
-                continue
-            picked.append((r.get("score") or 0, full))
+            if ok(r):
+                picked.append((r.get("score") or 0, r["full_name"]))
     picked.sort(reverse=True)
-    return [f for _, f in picked[:n]]
+    if helped:
+        log.info(STAGE, f"help-wanted repos this run: {helped}")
+    return (helped + [f for _, f in picked])[:n]
 
 
 # ---------------------------------------------------------------- phase 3/4: scout + build
@@ -431,6 +450,12 @@ def run(dry: bool = False) -> dict:
         hk = cleanup(dry_run=dry)
         # 1. PR states + activity
         prs = refresh_prs(state.get("last_run", t_start - 86400))
+        if not dry and t_start - float((db.kv_get("helpwanted_last") or {}).get("ts", 0)) > 3 * 86400:
+            try:
+                from .helpwanted import refresh
+                refresh()
+            except Exception as e:
+                log.warn(STAGE, f"help-wanted refresh failed: {e}")
         try:
             from .responder import digest_lines
             prs["followups"] = digest_lines(state.get("last_run", t_start - 86400))
