@@ -33,6 +33,22 @@ BADGES = [
 ]
 TIER_NAMES = ["", "bronze", "silver", "gold"]
 
+# profile "highlight" badges (not tiered achievements): name, how, how we judge status, action link
+HIGHLIGHTS = [
+    ("Pro", "Use GitHub Pro (free for students via the Student Developer Pack)", "plan", "https://education.github.com/pack"),
+    ("Developer Program Member", "Register for the GitHub Developer Program (free)", "manual", "https://github.com/developer/register"),
+    ("Security advisory credit", "Be credited on an advisory in the GitHub Advisory Database", "advisory", "https://github.com/github/advisory-database"),
+    ("GitHub Campus Expert", "Join GitHub's student leadership program", "manual", "https://education.github.com/experts"),
+    ("Security Bug Bounty Hunter", "Report a valid vulnerability in GitHub itself (we are NOT pursuing this)", "declined", "https://bounty.github.com/"),
+]
+# achievements GitHub lists but nobody can currently earn
+UNAVAILABLE = [
+    ("Heart On Your Sleeve", "React to something with a heart emoji", "in testing, not released"),
+    ("Open Sourcerer", "PRs merged in many public repos", "in testing, not released"),
+    ("Arctic Code Vault", "Code in the 2020 Archive Program", "no longer earnable"),
+    ("Mars 2020 Contributor", "Code in the Mars 2020 mission", "no longer earnable"),
+]
+
 PAIR_Q = """query($q: String!, $after: String) { search(query: $q, type: ISSUE, first: 50, after: $after) {
   pageInfo { hasNextPage endCursor }
   nodes { ... on PullRequest { url commits(first: 60) { nodes { commit { message authors(first: 6) { totalCount } } } } } } } }"""
@@ -126,7 +142,34 @@ def compute() -> dict:
     }
     for b in out:
         b["note"] = notes.get(b["name"], "")
-    return {"ts": time.time(), "login": me, "badges": out, "merged": merged(me), "open_upstream": open_prs}
+
+    # highlight badges (not tiered achievements)
+    rc, plan = _gh("api", "user", "-q", ".plan.name")
+    is_pro = rc == 0 and plan.strip() not in ("free", "")
+    try:
+        adv = json.loads((PROJECT / "data" / "advisory_state.json").read_text()).get("drafts") or {}
+    except Exception:
+        adv = {}
+    adv_prs = [d for d in adv.values() if d.get("pr_url")]
+    adv_merged = _count(f"author:{me} is:pr is:merged repo:github/advisory-database")
+    highlights = []
+    for name, how, kind, link in HIGHLIGHTS:
+        h = {"name": name, "how": how, "link": link, "earned": name in earned}
+        if kind == "plan":
+            h["earned"] = h["earned"] or is_pro
+            h["status"] = "earned" if h["earned"] else "apply with your @ucsc.edu email, free for students"
+        elif kind == "advisory":
+            h["earned"] = h["earned"] or adv_merged > 0
+            h["status"] = (f"{adv_merged} correction(s) merged" if adv_merged else
+                           f"{len(adv_prs)} advisory PR(s) open, waiting on review" if adv_prs else "advisory PRs opening daily")
+        elif kind == "declined":
+            h["status"] = "not pursuing (requires attacking GitHub's own systems)"
+        else:
+            h["status"] = "earned" if h["earned"] else "needs you (one-time signup)"
+        highlights.append(h)
+    unavailable = [{"name": n, "how": hw, "status": s} for n, hw, s in UNAVAILABLE]
+    return {"ts": time.time(), "login": me, "badges": out, "merged": merged(me), "open_upstream": open_prs,
+            "highlights": highlights, "unavailable": unavailable}
 
 
 def get(refresh: bool = False) -> dict:

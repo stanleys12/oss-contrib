@@ -100,8 +100,13 @@ function badgesHTML(d) {
     return `<div class="ti"><div class="row"><b class="grow">${esc(b.name)}</b>${state}</div><div class="small muted">${esc(b.how)}${b.count != null ? ` · <b>${fmt(b.count)}</b>` : ''}</div>${bar}${tiers}${b.note ? `<div class="small" style="color:var(--fg2);margin-top:3px">${esc(b.note)}</div>` : ''}</div>`;
   }).join('');
   const got = d.badges.filter(b => b.earned).length;
-  return `<div class="card today"><div class="row"><h3 class="grow" style="margin-top:0">GitHub badges · ${got} of ${d.badges.length}</h3><button class="sm" onclick="refreshBadges(this)">refresh</button></div>
-    <div class="small muted">checked ${ago(d.ts)} ago for ${esc(d.login)}</div><div class="todaylist">${rows}</div></div>`;
+  const hi = (d.highlights || []).map(h => `<div class="ti"><div class="row"><b class="grow">${esc(h.name)}</b>${h.earned ? badge('earned', 'approve') : badge('not yet', 'needs_work')}</div>
+    <div class="small muted">${esc(h.how)}</div><div class="small" style="color:var(--fg2)">${esc(h.status)}${h.link ? ` · <a href="${esc(h.link)}" target="_blank">link</a>` : ''}</div></div>`).join('');
+  const un = (d.unavailable || []).map(u => `<div class="ti"><div class="row"><b class="grow" style="color:var(--fg3)">${esc(u.name)}</b><span class="muted small">${esc(u.status)}</span></div></div>`).join('');
+  return `<div class="card today"><div class="row"><h3 class="grow" style="margin-top:0">GitHub badges · ${got} of ${d.badges.length} achievements</h3><button class="sm" onclick="refreshBadges(this)">refresh</button></div>
+    <div class="small muted">checked ${ago(d.ts)} ago for ${esc(d.login)}</div><div class="todaylist">${rows}</div>
+    ${hi ? `<h3>Profile badges</h3><div class="todaylist">${hi}</div>` : ''}
+    ${un ? `<h3>Not earnable</h3><div class="todaylist">${un}</div>` : ''}</div>`;
 }
 function mergedHTML(d) {
   const m = d.merged || [];
