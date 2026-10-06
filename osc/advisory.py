@@ -326,8 +326,10 @@ def daily() -> dict:
     day = time.strftime("%Y-%m-%d")
     sent_today = sum(1 for d in st["drafts"].values() if d.get("pr_url") and time.strftime("%Y-%m-%d", time.localtime(d.get("submitted_at", 0))) == day)
     cap = int(config.setting("ADVISORY_MAX_PER_DAY"))
-    if sent_today < cap:
-        run_drafts(cap - sent_today + 2)
+    # draft only if we don't already have enough ready-to-submit drafts for today's cap
+    ready = [g for g, a in st["drafts"].items() if not a.get("pr_url") and a.get("verdict") in ("ok", "fix")]
+    if sent_today < cap and len(ready) < (cap - sent_today):
+        run_drafts(cap - sent_today - len(ready) + 1)
         st = _state()
     opened = []
     for ghsa, a in list(st["drafts"].items()):
