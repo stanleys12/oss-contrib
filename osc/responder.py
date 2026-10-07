@@ -349,6 +349,28 @@ def _hold(path: Path) -> None:
 
 
 # ---------------------------------------------------------------- the two agents
+HINTS_F = PROJECT / "data" / "respond_hints.json"
+
+
+def _hint_for(pr_url: str) -> str:
+    """Per-PR guidance the owner left for the responder (data/respond_hints.json: {pr_url: text}). Used once:
+    cleared after the responder posts, so it does not keep re-steering later replies on the same PR."""
+    try:
+        return (json.loads(HINTS_F.read_text()) or {}).get(pr_url, "")
+    except Exception:
+        return ""
+
+
+def _clear_hint(pr_url: str) -> None:
+    try:
+        h = json.loads(HINTS_F.read_text())
+        if pr_url in h:
+            h.pop(pr_url)
+            HINTS_F.write_text(json.dumps(h, indent=1))
+    except Exception:
+        pass
+
+
 def _run_agent(c: dict, repo: dict, pr: dict, me: str, items: list[dict], path: Path, out: Path, stamp: str, feedback: str) -> tuple[dict, float]:
     branch_log = _git(path, "log", "-n", "25", "--format=%B", "refs/osc/pr-head", "--not", f"origin/{pr['baseRefName']}", check=False).lower()
     trailer = "co-authored-by: claude" in branch_log
@@ -367,6 +389,10 @@ def _run_agent(c: dict, repo: dict, pr: dict, me: str, items: list[dict], path: 
                              else "Do not add AI attribution lines or Co-Authored-By trailers; the existing commits on this branch have none."),
     }.items():
         p = p.replace(k, v)
+    hint = _hint_for(pr["url"])
+    if hint:
+        p += ("\n\n## Guidance from the account owner for THIS pull request\nUse this to make your reply genuinely helpful and "
+              "specific. Still verify every factual claim yourself before stating it, and keep the casual human tone:\n" + hint)
     if feedback:
         p += ("\n\n## Your previous attempt was blocked by the checker\nYour commits from that attempt are still on the branch. Fix exactly these "
               "problems (new commits on top are fine), then answer again with the full JSON:\n" + feedback)
@@ -552,6 +578,8 @@ def handle(c: dict, pr: dict, items: list[dict], me: str, st: dict, draft: bool 
         threads = {i["target"] for i in items if i["kind"] == "thread"} | {
             f"t{t['comments']['nodes'][0]['databaseId']}" for t in (pr.get("reviewThreads") or {}).get("nodes") or [] if t["comments"]["nodes"]}
         rec["replies"] = _post(c["repo"], num, data["replies"], threads)
+        if rec["replies"]:
+            _clear_hint(pr["url"])
         if data["action"] == "close" and config.setting("RESPOND_ALLOW_CLOSE"):
             rc, o = _gh("api", "-X", "PATCH", f"repos/{c['repo']}/pulls/{num}", "-f", "state=closed", "-q", ".state")
             if rc == 0:
