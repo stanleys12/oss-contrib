@@ -82,6 +82,12 @@ DEFAULTS = {
     "RESPOND_MAX_ROUNDS_PER_PR_DAY": 3,
     "RESPOND_REREQUEST_DAYS": 3,
     "BACKOFF_CLASSIFY": True,     # read the maintainer's reasoning before backing off, not just keyword-match  # re-request review once, this long after our push made a maintainer's review stale
+    # ---- vulnerability research + coordinated disclosure (user 2026-10-07) ----
+    "VULNSCAN_AUTO_SUBMIT": False,  # never report a vulnerability without the user's go
+    "VULNSCAN_MODEL": "opus",
+    "VULNSCAN_MAX_TURNS": 150,
+    "VULNSCAN_BUDGET_USD": 10.0,    # deep analysis per repo
+    "VULNSCAN_VERIFY_BUDGET_USD": 5.0,
     # ---- Discussions answers toward the Galaxy Brain badge (user goal 2026-10-04) ----
     "DISCUSS_AUTO_POST": True,    # user 10-04: "whatever you think is best" -> on, checker-gated, max DISCUSS_PER_RUN a day
     "DISCUSS_DISCLOSURE": "(I looked this up in the code with help from an AI assistant; the links are to the lines I checked.)",
