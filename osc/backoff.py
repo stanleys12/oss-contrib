@@ -73,10 +73,54 @@ def match(text: str) -> str | None:
     return m.group(0).strip()[:80] if m else None
 
 
-def _record(repo: str, phrase: str, who: str, url: str) -> bool:
+def _referenced_issue(repo: str, body: str) -> str:
+    """Pull in the text of a #N the maintainer pointed at (their reasoning often lives there)."""
+    m = re.search(r"#(\d+)\b", body or "")
+    if not m:
+        return ""
+    rc, out = _gh("api", f"repos/{repo}/issues/{m.group(1)}", "-q", "{t:.title,b:.body}")
+    try:
+        d = json.loads(out)
+        head = f"\n\n[they referenced #{m.group(1)}: {d.get('t', '')}]\n{(d.get('b') or '')[:800]}"
+    except Exception:
+        return ""
+    rc, cj = _gh("api", f"repos/{repo}/issues/{m.group(1)}/comments?per_page=20",
+                 "--jq", '[.[] | select(.author_association == "MEMBER" or .author_association == "OWNER" or .author_association == "COLLABORATOR") | .body] | join("\n---\n")')
+    return head + ("\n\nmaintainer comments there:\n" + cj[:800] if rc == 0 and cj else "")
+
+
+def _confirm_stop(repo: str, pr: dict, phrase: str, who: str, body: str) -> tuple[bool, str]:
+    """Read the reasoning, not just the phrase: an agent judges whether the project rejects our kind of
+    contribution as a rule (stop) or this was specific to one PR (keep). Fails safe to NOT stopping."""
+    if not config.setting("BACKOFF_CLASSIFY"):
+        return True, f"phrase '{phrase}' from {who}"
+    from .claude_runner import run_claude, extract_json
+    ctx = f"{who}: {body}" + _referenced_issue(repo, body)
+    p = (config.PROMPTS_DIR / "backoff.md").read_text()
+    for k, v in {"__REPO__": repo, "__PR_URL__": pr.get("url", ""), "__PR_TITLE__": str(pr.get("title") or ""),
+                 "__STATE__": str(pr.get("state")), "__CONTEXT__": ctx[:4000]}.items():
+        p = p.replace(k, v)
+    try:
+        r = run_claude(p, config.ROOT, model="sonnet", max_turns=2, stage=STAGE, repo=repo, allowed_tools=[],
+                       json_schema={"type": "object", "required": ["stop"], "properties": {"stop": {"type": "boolean"}, "reason": {"type": "string"}}},
+                       max_budget_usd=0.4, timeout_s=300)
+        d = r.structured if isinstance(r.structured, dict) else extract_json(r.text)
+        if isinstance(d, dict):
+            return bool(d.get("stop")), d.get("reason", phrase)
+    except Exception as e:
+        log.warn(STAGE, f"classify failed ({e}); not backing off to be safe", repo=repo)
+    return False, "classifier unavailable"
+
+
+def _record(repo: str, phrase: str, who: str, url: str, pr: dict | None = None, body: str = "") -> bool:
     st = _state()
     if repo in st:
         return False
+    stop, reason = _confirm_stop(repo, pr or {}, phrase, who, body)
+    if not stop:
+        log.info(STAGE, f"{repo}: '{phrase}' from {who} is not a stop signal ({reason}); keeping the repo")
+        return False
+    phrase = reason or phrase
     st[repo] = {"ts": time.time(), "phrase": phrase, "by": who, "url": url}
     STATE_F.write_text(json.dumps(st, indent=1))
     log.warn(STAGE, f"backing off {repo}: {who} signalled unwanted ('{phrase}') on {url}", repo=repo)
@@ -102,7 +146,7 @@ def check_pr(repo: str, pr: dict, me: str) -> bool:
                 continue
             ph = match(c.get("body") or "")
             if ph:
-                return _record(repo, ph, who, c.get("url") or pr.get("url", ""))
+                return _record(repo, ph, who, c.get("url") or pr.get("url", ""), pr=pr, body=c.get("body") or "")
     # (b) the PR was closed-not-merged BY a maintainer and the close comment matches (covers "closed as spam"
     #     where the phrase is on the closing event, not a separate comment)
     if closed:
@@ -113,7 +157,7 @@ def check_pr(repo: str, pr: dict, me: str) -> bool:
             # only trust the close actor if they are a maintainer (checked via a cheap membership call below)
             ph = match(pr.get("title") or "")
             if ph and _is_maintainer(repo, actor):
-                return _record(repo, ph, actor, pr.get("url", ""))
+                return _record(repo, ph, actor, pr.get("url", ""), pr=pr, body=pr.get("title") or "")
     return False
 
 
