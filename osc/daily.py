@@ -540,7 +540,11 @@ def run(dry: bool = False) -> dict:
         except Exception:
             pass
         n_ready = len(today_prs)
-        sent = False if dry else send_digest(f"[oss-contrib] {day} {'am' if time.localtime().tm_hour < 12 else 'pm'}: {len(prs['merged'])} merged, {len(prs.get('good', []))} approved/progress, {len(prs['activity'])} need reply, {n_ready} opened today", digest)
+        # 4 runs/day, but only email the digest on the morning (<=5h) and afternoon (12-15h) runs; the 08:00/20:00
+        # runs do the same scout+build+open work silently so the inbox stays at two summaries a day.
+        hr = time.localtime().tm_hour
+        emit_digest = hr <= 5 or (12 <= hr <= 15)
+        sent = False if (dry or not emit_digest) else send_digest(f"[oss-contrib] {day} {'am' if hr < 12 else 'pm'}: {len(prs['merged'])} merged, {len(prs.get('good', []))} approved/progress, {len(prs['activity'])} need reply, {n_ready} opened today", digest)
         state["last_run"] = t_start
         state_f.write_text(json.dumps(state))
         log.info(STAGE, f"done in {round(time.time()-t_start)}s; digest {'sent' if sent else 'on disk'}; spend ${spent:.1f}")
