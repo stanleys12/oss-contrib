@@ -685,6 +685,14 @@ def run(dry: bool = False, draft: bool = False, force: bool = False, only: str |
             pr = fetch_pr(c["repo"], int(c["pr_url"].rsplit("/", 1)[1]))
             if not pr or pr.get("state") != "OPEN":
                 continue                                # merges and closures are recorded by the dashboard poller and the daily run
+            if not dry:
+                try:
+                    from .backoff import check_pr
+                    if check_pr(c["repo"], pr, me):
+                        db.update("changes", "id", c["id"], {"status_note": ((c.get("status_note") or "") + "\nbacked off: maintainer signalled no automated PRs").strip()})
+                        continue
+                except Exception as e:
+                    log.warn(STAGE, f"backoff check failed: {e}")
             ps = st["prs"].setdefault(pr["url"], {})
             rr = rerequest(c, pr, me, ps, now, dry=dry)
             if rr:

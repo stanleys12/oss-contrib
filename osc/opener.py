@@ -97,6 +97,9 @@ def gate(cid: str, recheck: bool = True) -> tuple[bool, list[str], list[dict]]:
     s = strong_repo(repo)
     if s:
         why.append(f"repo: {s}")
+    from .backoff import is_backed_off
+    if is_backed_off(c["repo"]):
+        why.append("maintainer asked us not to send PRs here (backed off)")
     if c["repo"] in _open_repos():
         why.append("we already have an open PR in this repo")
     if c.get("review_verdict") != "approve" or float(c.get("review_score") or 0) < float(config.setting("OPEN_MIN_REVIEW")):
@@ -349,6 +352,9 @@ def blocker(c: dict, open_repos: set[str] | None = None) -> str:
     repo = db.parse_json_fields(db.row("SELECT * FROM repos WHERE full_name=?", (c["repo"],)), ["raw"]) or {}
     raw = _raw(repo) if repo else {}
     full = c["repo"]
+    from .backoff import is_backed_off
+    if is_backed_off(full):
+        return "a maintainer asked us not to send PRs here (backed off)"
     if full in NON_GITHUB:
         return "project doesn't take GitHub PRs (Gerrit / mailing list / Bugzilla flow)"
     if raw.get("ai_prohibited"):

@@ -49,6 +49,16 @@ def _gh(*args: str, timeout: int = 120) -> tuple[int, str]:
 
 
 # ---------------------------------------------------------------- phase 1: PR states
+def _backoff_scan() -> None:
+    try:
+        from .backoff import scan
+        r = scan()
+        if r.get("backed_off"):
+            log.warn(STAGE, f"backed off from: {r['backed_off']}")
+    except Exception as e:
+        log.warn(STAGE, f"backoff scan failed: {e}")
+
+
 def refresh_prs(since_ts: float) -> dict:
     """Update merged/closed statuses and sort new maintainer activity on our open PRs into
     good news (approvals, CI commands) and things that actually need a reply."""
@@ -151,7 +161,8 @@ def pick_repos(n: int, reanalyze_days: float | None = None) -> list[str]:
 
     def ok(r: dict) -> bool:
         full = r["full_name"]
-        if full in seen or full in DENY or full in busy or r.get("archived"):
+        from .backoff import is_backed_off
+        if full in seen or full in DENY or full in busy or r.get("archived") or is_backed_off(full):
             return False
         seen.add(full)
         raw = r.get("raw") if isinstance(r.get("raw"), dict) else json.loads(r.get("raw") or "{}")
@@ -237,7 +248,8 @@ def candidates(repos: list[str]) -> list[dict]:
     for o in db.rows("SELECT o.id, o.repo, o.title, o.kind, o.priority, o.accept_likelihood, o.confidence, "
                      "r.full_name, r.topics, r.description, r.language FROM opportunities o JOIN repos r ON r.full_name=o.repo "
                      "WHERE o.status='proposed' AND o.created_at>=? ORDER BY o.priority*o.accept_likelihood DESC", (max_age,)):
-        if o["repo"] in seen or o["repo"] in DENY or not ok(o) or needs_gpu(o):
+        from .backoff import is_backed_off
+        if o["repo"] in seen or o["repo"] in DENY or is_backed_off(o["repo"]) or not ok(o) or needs_gpu(o):
             continue
         if re.search(r"\b(cuda|gpu|nccl|deepspeed|rocm|triton kernel|fsdp)\b", o["title"] or "", re.I):
             continue   # the fix itself needs a GPU to test
@@ -453,6 +465,8 @@ def run(dry: bool = False) -> dict:
         hk = cleanup(dry_run=dry)
         # 1. PR states + activity
         prs = refresh_prs(state.get("last_run", t_start - 86400))
+        if not dry:
+            _backoff_scan()
         if not dry and t_start - float((db.kv_get("helpwanted_last") or {}).get("ts", 0)) > 20 * 3600:
             try:
                 from .helpwanted import refresh

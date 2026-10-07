@@ -66,7 +66,8 @@ def salvage(day: str, limit: int = 3) -> str | None:
         if tried >= limit or _left(day) <= 2 or _met(day):
             break
         repo = db.row("SELECT * FROM repos WHERE full_name=?", (c["repo"],)) or {}
-        if c["repo"] in DENY or needs_gpu(repo) or _not_openable({"repo": c["repo"]}) or int(c.get("review_round") or 0) >= 5:
+        from .backoff import is_backed_off
+        if c["repo"] in DENY or is_backed_off(c["repo"]) or needs_gpu(repo) or _not_openable({"repo": c["repo"]}) or int(c.get("review_round") or 0) >= 5:
             continue
         note = c.get("status_note") or ""
         if "HOLD" in note or "BLOCKED" in note or "too small" in note:

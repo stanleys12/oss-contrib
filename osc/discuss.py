@@ -102,7 +102,9 @@ def pool() -> list[str]:
     extra = [r["full_name"] for r in db.rows("SELECT full_name, raw FROM repos WHERE archived IS NOT 1 AND stars >= 1500 ORDER BY score DESC LIMIT ?",
                                              (int(config.setting("DISCUSS_EXTRA_REPOS")) * 2,))
              if r["full_name"] not in DENY and '"ai_prohibited": true' not in (r["raw"] or "")]
-    return list(dict.fromkeys(mine + extra[:int(config.setting("DISCUSS_EXTRA_REPOS"))]))
+    from .backoff import repos as backed_off
+    bo = backed_off()
+    return [r for r in dict.fromkeys(mine + extra[:int(config.setting("DISCUSS_EXTRA_REPOS"))]) if r not in bo]
 
 
 def accept_rate(repo: str, st: dict) -> float:
