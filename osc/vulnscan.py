@@ -124,8 +124,9 @@ def scan(repo: str) -> dict:
                      stage=STAGE, repo=repo, skip_permissions=True, json_schema=VULN_SCHEMA,
                      max_budget_usd=float(config.setting("VULNSCAN_BUDGET_USD")), transcript_path=out / f"scan_{stamp}.jsonl", timeout_s=5400,
                      allowed_tools=RESEARCH_TOOLS, disallowed_tools=["Bash(git push:*)", "Bash(gh pr create:*)", "Bash(gh repo fork:*)"],
-                     append_system_prompt="Defensive security research. Analyze ONLY this local checkout. Never connect to or attack any live or "
-                                          "external system. No weaponized exploits. Never push or open anything. Reset any throwaway test files when done.")
+                     append_system_prompt="Defensive security research. Set up and attack your OWN local instance (install deps, build, run it here). "
+                                          "Never connect to, scan, or attack any live, production, or third-party system you do not own. No weaponized "
+                                          "exploits. Never push or open anything on GitHub. Reset throwaway test files when done.")
     a = res.structured if isinstance(res.structured, dict) else extract_json(res.text) or {"found": False, "reason": "no answer"}
     a["cost"] = res.cost_usd
     # discard any throwaway test files the agent left
@@ -146,7 +147,8 @@ def scan(repo: str) -> dict:
                     stage="vulnscan-check", repo=repo, skip_permissions=True, json_schema=VERIFY_SCHEMA,
                     max_budget_usd=float(config.setting("VULNSCAN_VERIFY_BUDGET_USD")), transcript_path=out / f"verify_{stamp}.jsonl", timeout_s=3600,
                     allowed_tools=RESEARCH_TOOLS, disallowed_tools=["Bash(git push:*)", "Bash(gh pr create:*)", "Bash(gh repo fork:*)"],
-                    append_system_prompt="Adversarial verification, local checkout only, never touch a live system, no weaponized exploits.")
+                    append_system_prompt="Adversarial verification against your own local instance (install/build/run here is fine). Never touch a "
+                                         "live, production, or third-party system you do not own. No weaponized exploits.")
     a["cost"] += vr.cost_usd
     subprocess.run(["git", "checkout", "-q", "--", "."], cwd=str(path), capture_output=True)
     subprocess.run(["git", "clean", "-fdq", "-e", ".venv", "-e", "node_modules"], cwd=str(path), capture_output=True)

@@ -14,7 +14,9 @@ report body:
 __REPORT_BODY__
 ```
 
-## Check every one, in the local checkout only (never touch any live system)
+You may set the project up locally (install its dependencies, build it, run it) and attack your own local instance to reproduce the claim. Never touch any live, production, or third-party system you do not own.
+
+## Check every one, against your own local instance only
 1. **Reachability.** Follow the path yourself from the attacker-controlled entry point to the dangerous sink. Do the guards that actually exist in the code stop it? Is the entry point really reachable by an attacker, or does it need privileges/trust they wouldn't have? If the path is guarded or unreachable, it is not valid.
 2. **Reproduce it.** Re-run their verification (or a minimal equivalent) offline, here. If you cannot make the flaw actually trigger against this code, it is not confirmed.
 3. **Real impact.** Does exploiting it give a concrete security impact, or is it a crash/hardening issue dressed up? Is the severity honest?
