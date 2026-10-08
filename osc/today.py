@@ -22,6 +22,7 @@ UPDATES_F = PROJECT / "data" / "updates.json"
 STATE_F = PROJECT / "data" / "daily_state.json"
 LOCK = PROJECT / "data" / "daily.lock"
 POLL_S = 300
+DAILY_RUNS = ((2, 0), (8, 0), (14, 0), (20, 0))   # launchd com.stanleyshen.osc-daily StartCalendarInterval
 BOTS = re.compile(r"(\[bot\]$|^codecov|^coveralls|^sonarcloud|^netlify|^vercel|^github-actions|^dependabot|^copilot|^claude$|^coderabbit|^gemini-code-assist|^cla\b|-cla$|cla-|bot$)", re.I)
 
 _state = {"login": None, "polled_at": 0.0, "error": "", "opened_today": [], "open_prs": 0}
@@ -184,8 +185,7 @@ def summary() -> dict:
     with _lock:
         opened = list(_state["opened_today"])
         polled, err, open_prs = _state["polled_at"], _state["error"], _state["open_prs"]
-    runs = [{"what": "scheduled run (scout + build + open)", "at": _next_at(3, 30)},
-            {"what": "scheduled run (scout + build + open)", "at": _next_at(13, 30)}]
+    runs = [{"what": "scheduled run (scout + build + open)", "at": _next_at(h, m)} for h, m in DAILY_RUNS]
     now = time.time()
     if len(opened) < target:
         nxt = now - (now % 3600) + 5 * 60

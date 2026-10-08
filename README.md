@@ -21,7 +21,7 @@ scan ──► rank ──► analyze (clone + issue triage + static analysis + 
 
 | Job | When | What |
 |---|---|---|
-| `osc.daily` | 03:30, 13:30 | housekeeping, PR states, scout, build, review, compliance, open, email digest |
+| `osc.daily` | 02:00, 08:00, 14:00, 20:00 | housekeeping, PR states, scout, build, review, compliance, open, email digest |
 | `osc.quota` | hourly | keeps going until the daily PR target is met |
 | `osc.responder` | every 30 min | answers maintainer feedback, fixes conflicts and red CI, pushes, replies |
 | `osc.discuss` | 10:15 | answers up to 2 unanswered Discussions Q&A questions, checked against the code |

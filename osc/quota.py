@@ -8,7 +8,7 @@ cheapest first, until one opens or the day's rescue money (DAILY_RESCUE_USD) run
 3. scout fresh repos and build until one passes; when the picker runs dry, look at repos scouted
    a few days ago again and refresh discovery.
 
-Shares the daily run's lock and budget ledger, so it never overlaps the 03:30 / 13:30 runs.
+Shares the daily run's lock and budget ledger, so it never overlaps the scheduled daily runs.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from .housekeeping import apply_isolation, cleanup
 STAGE = "quota"
 STATE_F = PROJECT / "data" / "daily_state.json"
 LAST_HOUR = 24          # user 10-03: time is not a constraint, run around the clock
-FIRST_HOUR = 0          # the shared lock keeps it from overlapping the 03:30 / 13:30 runs
+FIRST_HOUR = 0          # the shared lock keeps it from overlapping the scheduled daily runs
 
 
 def _state() -> dict:
