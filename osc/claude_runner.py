@@ -30,6 +30,30 @@ class ClaudeResult:
     tool_calls: list = field(default_factory=list)
 
 
+# This machine has no Docker and no Linux containers for the agents. An agent that believes otherwise
+# starts Docker.app and polls it (it once ran ~22h on ~2 cores for a single Linux-only build). We stop that
+# two ways, independent of permission mode: a PATH shim that makes `docker` and friends fail instantly, and a
+# deny-list the harness also applies. Agents verify fixes with native macOS builds/tests instead.
+BLOCK_DOCKER = ["Bash(docker:*)", "Bash(docker-compose:*)", "Bash(colima:*)", "Bash(nerdctl:*)",
+                "Bash(open -a Docker:*)", "Bash(open -a docker:*)"]
+
+
+def _nodocker_path() -> str:
+    """A dir of failing stubs for docker-family commands, prepended to the agent's PATH."""
+    d = config.ROOT / ".tools" / "nodocker"
+    d.mkdir(parents=True, exist_ok=True)
+    stub = ("#!/bin/sh\n"
+            "echo 'docker/containers are not available on this machine; this engine runs native macOS "
+            "builds and tests only. Pick a fix you can verify without a Linux container.' >&2\n"
+            "exit 127\n")
+    for name in ("docker", "docker-compose", "colima", "nerdctl"):
+        f = d / name
+        if not f.exists() or f.read_text() != stub:
+            f.write_text(stub)
+            f.chmod(0o755)
+    return str(d)
+
+
 def _summarize_tool(name: str, inp: dict) -> str:
     try:
         if name in ("Read", "Write", "Edit", "MultiEdit"):
@@ -58,8 +82,8 @@ def run_claude(prompt: str, cwd: Path, *, model: str, max_turns: int, stage: str
         cmd.append("--dangerously-skip-permissions")
     if allowed_tools:
         cmd += ["--allowedTools", *allowed_tools]
-    if disallowed_tools:
-        cmd += ["--disallowedTools", *disallowed_tools]
+    dt = list(disallowed_tools or []) + BLOCK_DOCKER
+    cmd += ["--disallowedTools", *dt]
     if json_schema:
         cmd += ["--json-schema", json.dumps(json_schema)]
     if max_budget_usd:
@@ -74,6 +98,7 @@ def run_claude(prompt: str, cwd: Path, *, model: str, max_turns: int, stage: str
     env.pop("CLAUDE_CODE_ENTRYPOINT", None)
     env["GH_TOKEN"] = config.github_token()  # lets the agent use `gh` read-only for issue/PR research
     env["GIT_TERMINAL_PROMPT"] = "0"
+    env["PATH"] = _nodocker_path() + os.pathsep + env.get("PATH", "")  # docker-family commands fail fast here
     if env_extra:
         env.update(env_extra)
 
