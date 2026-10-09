@@ -1,7 +1,7 @@
 """The dashboard's "Today" panel: what's planned, what's done, and what changed on GitHub.
 
-A background thread in the server polls GitHub every POLL_S seconds (one GraphQL call) for activity on
-our PRs and keeps a rolling feed in data/updates.json, so updates show up without anyone asking.
+A background thread in the server polls GitHub every POLL_S seconds (a few small GraphQL pages) for
+activity on our PRs and keeps a rolling feed in data/updates.json, so updates show up without anyone asking.
 """
 from __future__ import annotations
 
@@ -28,11 +28,16 @@ BOTS = re.compile(r"(\[bot\]$|^codecov|^coveralls|^sonarcloud|^netlify|^vercel|^
 _state = {"login": None, "polled_at": 0.0, "error": "", "opened_today": [], "open_prs": 0}
 _lock = threading.Lock()
 
-QUERY = """query($q: String!) { search(query: $q, type: ISSUE, first: 60) { nodes { ... on PullRequest {
-  number title url state merged mergedAt closedAt createdAt reviewDecision repository { nameWithOwner }
-  comments(last: 6) { nodes { author { login } createdAt url bodyText } }
-  reviews(last: 6) { nodes { author { login } state submittedAt url bodyText } }
+# Paged in small chunks: one big first:60 search with nested comments/reviews trips GitHub's
+# "Resource limits for this query exceeded" once we carry dozens of open PRs, so we walk pages of 25.
+QUERY = """query($q: String!, $after: String) { search(query: $q, type: ISSUE, first: 25, after: $after) {
+  pageInfo { hasNextPage endCursor }
+  nodes { ... on PullRequest {
+    number title url state merged mergedAt closedAt createdAt reviewDecision repository { nameWithOwner }
+    comments(last: 5) { nodes { author { login } createdAt url bodyText } }
+    reviews(last: 5) { nodes { author { login } state submittedAt url bodyText } }
 } } } }"""
+MAX_PAGES = 8
 
 
 def _gh(*args: str, timeout: int = 60) -> tuple[int, str]:
@@ -57,10 +62,21 @@ def poll() -> None:
         _state["login"] = me.strip()
     me = _state["login"]
     since = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 21 * 86400))
-    rc, out = _gh("api", "graphql", "-f", f"query={QUERY}", "-f", f"q=author:{me} is:pr updated:>={since}")
-    if rc != 0:
-        raise RuntimeError(out[:200])
-    nodes = [n for n in json.loads(out)["data"]["search"]["nodes"] if n]
+    q = f"author:{me} is:pr updated:>={since}"
+    nodes, after = [], None
+    for _ in range(MAX_PAGES):
+        args = ["api", "graphql", "-f", f"query={QUERY}", "-f", f"q={q}"]
+        if after:
+            args += ["-f", f"after={after}"]
+        rc, out = _gh(*args)
+        if rc != 0:
+            raise RuntimeError(out[:200])
+        search = json.loads(out)["data"]["search"]
+        nodes += [n for n in search["nodes"] if n]
+        page = search["pageInfo"]
+        if not page["hasNextPage"]:
+            break
+        after = page["endCursor"]
     feed = _load()
     seen = {u["id"] for u in feed}
     first_run = not feed
