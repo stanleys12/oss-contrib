@@ -388,7 +388,13 @@ if __name__ == "__main__":
             except (ValueError, OSError):
                 busy = False
         if busy:
-            print(json.dumps({"skipped": "pipeline running; it manages space itself", "free_gb": round(_free_gb(), 1)}))
+            # A long run used to let the guard stand down completely, and free disk could slide well below
+            # the floor before the run finished. cleanup() is safe to run alongside a build: it skips any
+            # clone holding the per-build lock, and it parks every work branch into a verified git bundle
+            # before deleting a clone, so nothing is lost and the active build is never touched. This keeps
+            # the workspace under its cap even mid-run; whole-clone LRU parking of idle work still happens.
+            s = cleanup(dry_run=False)
+            print(json.dumps({"busy_reclaim": True, "freed_mb": s["freed_mb"], "free_gb": s["free_gb"]}))
         else:
             print(json.dumps({"ok": ensure_space(float(config.setting("MIN_FREE_GB")) + 8), "free_gb": round(_free_gb(), 1)}))
         sys.exit(0)

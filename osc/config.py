@@ -124,7 +124,7 @@ DEFAULTS = {
     "MONTHLY_BUDGET_USD": 5000,  # rolling 30 days; above this only PR states are refreshed
     "SCOUT_PARALLEL": 3,
     "DAILY_DIGEST_TO": "",           # set in data/settings.json or OSC_DAILY_DIGEST_TO; empty = digests stay on disk
-    "MAX_WORKSPACE_GB": 25.0,     # clones + build artifacts cap
+    "MAX_WORKSPACE_GB": 15.0,     # clones + build artifacts cap (work is parked as git bundles, restored on demand)
     "MIN_FREE_GB": 12.0,          # skip builds below this much free disk
     "BUILDER_MAX_TURNS": 200,
     "REVIEWER_MAX_TURNS": 40,
