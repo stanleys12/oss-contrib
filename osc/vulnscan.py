@@ -31,6 +31,7 @@ from .analyzer import ensure_clone, osc_dir
 from .claude_runner import extract_json, run_claude
 from .daily import DENY, PROJECT, needs_gpu, send_digest
 from .disclose import pvr_enabled
+from .housekeeping import apply_isolation
 
 STAGE = "vulnscan"
 STATE_F = PROJECT / "data" / "vulnscan_state.json"
@@ -112,6 +113,7 @@ def candidates(n: int) -> list[str]:
 
 def scan(repo: str) -> dict:
     db.init()
+    apply_isolation()
     st = _state()
     st["scanned"][repo] = time.time()
     _save(st)
