@@ -2,12 +2,12 @@
 import json, subprocess, sys, time
 from pathlib import Path
 from osc import db, config, log, quality
-from osc.analyzer import workspace_path, assert_workspace_free, _default_branch
-from osc.contributor import _load_change, run_builder, run_reviewer, osc_dir, _git, _diff_stats, _run
+from osc.analyzer import live_path, assert_workspace_free, _default_branch
+from osc.contributor import _load_change, run_builder, run_reviewer, osc_dir, _git, _diff_stats, _run, _stage_leftovers
 
 cid = sys.argv[1]
 c, opp, repo = _load_change(cid)
-path = workspace_path(c["repo"]); out = osc_dir(c["repo"]) / cid
+path = live_path(c["repo"]); out = osc_dir(c["repo"]) / cid
 assert_workspace_free(path)
 base_branch = _default_branch(path)
 polish = (config.PROMPTS_DIR / "polish.md").read_text().replace("__REPO__", c["repo"])
@@ -27,8 +27,7 @@ try:
     import os
     os.environ["OSC_BUILDER_MAX_TURNS"] = "400"
     build, bcost = run_builder(opp, repo, path, out, c["branch"], feedback, "opus")
-    if _git(path, "status", "--porcelain").strip():
-        _git(path, "add", "-A", "--", ".", ":!.venv", ":!venv", ":!node_modules")
+    if _stage_leftovers(path):
         _run(["git", "commit", "-q", "-m", build.get("pr_title") or c["pr_title"] or opp["title"]], cwd=path)
     head = _git(path, "rev-parse", "HEAD").strip(); diff = _git(path, "diff", f"{c['base_sha']}...{head}")
     pr_title = build.get("pr_title") or c["pr_title"]; pr_body = build.get("pr_body") or c["pr_body"]
@@ -50,5 +49,8 @@ try:
     (out / "change.diff").write_text(diff); (out / "polish_summary.md").write_text(build2["summary"] or "")
     print(json.dumps({"change": cid, "status": status, "verdict": review.get("verdict"), "score": review.get("score"), "reads_human": review.get("reads_human"),
                       "lint": q["score"], "diff_lines": st["total"], "fixes": review.get("required_fixes"), "cost": round(bcost + rcost, 2)}, indent=1))
+except Exception as e:
+    db.update("changes", "id", cid, {"status": "needs_work", "status_note": f"polish pass failed: {e}"[:400], "updated_at": time.time()})
+    raise
 finally:
     _git(path, "checkout", "-q", base_branch, check=False)
