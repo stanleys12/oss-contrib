@@ -9,7 +9,7 @@ const pct = x => `${Math.round((x || 0) * 100)}%`;
 const badge = (t, cls) => `<span class="badge ${cls || t || ''}">${esc(t)}</span>`;
 const toast = m => { const d = document.createElement('div'); d.textContent = m; $('#toast').appendChild(d); setTimeout(() => d.remove(), 3500); };
 const copy = t => navigator.clipboard.writeText(t).then(() => toast('copied'));
-const md = s => esc(s || '').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/^(#{1,3}) (.*)$/gm, (m, h, t) => `<b style="font-size:${16 - h.length}px">${t}</b>`).replace(/(https?:\/\/[^\s)]+)/g, '<a href="$1" target="_blank">$1</a>');
+const md = s => esc(s || '').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/^(#{1,3}) (.*)$/gm, (m, h, t) => `<b style="font-size:${16 - h.length}px">${t}</b>`).replace(/(https?:\/\/(?:(?!&quot;|&#39;|&lt;|&gt;)[^\s<)])+?)(?=[.,;:!?]*(?:[\s<)]|&quot;|&#39;|&lt;|&gt;|$))/g, '<a href="$1" target="_blank">$1</a>');
 const ghIssue = (repo, n) => `<a href="https://github.com/${repo}/issues/${n}" target="_blank">#${n}</a>`;
 
 /* ---------------- live state ---------------- */
